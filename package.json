@@ -1,0 +1,21 @@
+{
+  "name": "shop-os",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev -w @shop-os/web",
+    "dev:api": "npm run dev -w @shop-os/api",
+    "build": "npm run build -w @shop-os/shared && npm run build -w @shop-os/api && npm run build -w @shop-os/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
