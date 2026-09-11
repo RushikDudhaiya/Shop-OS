@@ -7,6 +7,7 @@ import {
   updateShopSettingsSchema,
 } from "@shop-os/shared";
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/require-auth.js";
@@ -18,7 +19,7 @@ import { ShopModel } from "./shop.model.js";
 
 export const shopsRouter = Router();
 
-shopsRouter.post("/shops", requireAuth, async (req, res, next) => {
+shopsRouter.post("/shops", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = createShopSchema.parse(req.body);
     const shop = await ShopModel.create({
@@ -52,7 +53,7 @@ shopsRouter.post("/shops", requireAuth, async (req, res, next) => {
   }
 });
 
-shopsRouter.get("/shops", requireAuth, async (req, res, next) => {
+shopsRouter.get("/shops", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const memberships = await MembershipModel.find({
       userId: req.user!._id,
@@ -77,7 +78,7 @@ shopsRouter.get(
   "/shops/:shopId",
   requireAuth,
   requireShopMember(),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const shop = await ShopModel.findById(req.shopContext!.shopId);
       if (!shop) throw notFound("Shop not found");
@@ -96,7 +97,7 @@ shopsRouter.patch(
   "/shops/:shopId",
   requireAuth,
   requireShopMember("shop.settings"),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = updateShopProfileSchema.parse(req.body);
       const shop = await ShopModel.findById(req.shopContext!.shopId);
@@ -115,7 +116,7 @@ shopsRouter.patch(
   "/shops/:shopId/settings",
   requireAuth,
   requireShopMember("shop.settings"),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = updateShopSettingsSchema.parse(req.body);
       const shop = await ShopModel.findById(req.shopContext!.shopId);
@@ -142,7 +143,7 @@ shopsRouter.post(
   "/shops/:shopId/members",
   requireAuth,
   requireShopMember("shop.settings"),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = addMemberSchema.parse(req.body);
       if (body.role === "OWNER") {
@@ -196,7 +197,7 @@ shopsRouter.get(
   "/shops/:shopId/members",
   requireAuth,
   requireShopMember("shop.settings"),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (
         req.shopContext!.role !== "OWNER" &&
@@ -235,7 +236,7 @@ shopsRouter.patch(
   "/shops/:shopId/members/:membershipId",
   requireAuth,
   requireShopMember("shop.settings"),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = z
         .object({
