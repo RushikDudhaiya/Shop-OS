@@ -1,0 +1,13 @@
+# Render Blueprint — API only
+# Update Build Command in dashboard if not using Blueprint sync:
+# npm install --include=dev && npm run build -w @shop-os/shared && npm run build -w @shop-os/api
+
+services:
+  - type: web
+    name: Shop-OS
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install --include=dev && npm run build -w @shop-os/shared && npm run build -w @shop-os/api
+    startCommand: npm run start -w @shop-os/api
+    healthCheckPath: /api/health

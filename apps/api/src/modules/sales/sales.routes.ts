@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { Types } from "mongoose";
 import { notFound } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/require-auth.js";
@@ -297,26 +298,30 @@ salesRouter.post(
 /** Spec: GET /api/sales/:id — membership checked against sale.shopId */
 export const saleDetailRouter = Router();
 
-saleDetailRouter.get("/sales/:saleId", requireAuth, async (req, res, next) => {
-  try {
-    if (!Types.ObjectId.isValid(req.params.saleId)) {
-      throw notFound("Sale not found");
-    }
-    const sale = await SaleModel.findById(req.params.saleId);
-    if (!sale) throw notFound("Sale not found");
+saleDetailRouter.get(
+  "/sales/:saleId",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!Types.ObjectId.isValid(req.params.saleId)) {
+        throw notFound("Sale not found");
+      }
+      const sale = await SaleModel.findById(req.params.saleId);
+      if (!sale) throw notFound("Sale not found");
 
-    const membership = await MembershipModel.findOne({
-      shopId: sale.shopId,
-      userId: req.user!._id,
-      status: "ACTIVE",
-    });
-    if (!membership) {
-      throw notFound("Sale not found");
-    }
+      const membership = await MembershipModel.findOne({
+        shopId: sale.shopId,
+        userId: req.user!._id,
+        status: "ACTIVE",
+      });
+      if (!membership) {
+        throw notFound("Sale not found");
+      }
 
-    const bundle = await loadSaleBundle(sale._id, sale.shopId);
-    res.json(bundle);
-  } catch (err) {
-    next(err);
-  }
-});
+      const bundle = await loadSaleBundle(sale._id, sale.shopId);
+      res.json(bundle);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
