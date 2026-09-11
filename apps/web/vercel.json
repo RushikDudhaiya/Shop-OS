@@ -1,4 +1,8 @@
 {
+  "framework": "vite",
+  "installCommand": "npm install --prefix ../..",
+  "buildCommand": "npm run build -w @shop-os/shared --prefix ../.. && npm run build -w @shop-os/web --prefix ../..",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/:path*",
