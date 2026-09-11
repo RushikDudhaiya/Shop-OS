@@ -7,6 +7,11 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   SESSION_SECRET: z.string().min(16).default("dev-only-session-secret-change-me"),
+  /** When true, /auth/start returns OTP in response (no SMS yet). Use for demo only. */
+  SHOW_LOGIN_OTP: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;

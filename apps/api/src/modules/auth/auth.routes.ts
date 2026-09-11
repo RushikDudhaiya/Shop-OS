@@ -60,7 +60,9 @@ authRouter.post(
       expiresInSec: Math.floor(OTP_TTL_MS / 1000),
     };
 
-    if (req.env.NODE_ENV !== "production") {
+    // Never log OTP. Show on screen only in non-production OR when SHOW_LOGIN_OTP=true
+    // (SMS provider not wired yet — needed for live demo/testing).
+    if (req.env.NODE_ENV !== "production" || req.env.SHOW_LOGIN_OTP) {
       payload.devOtp = otp;
     }
 

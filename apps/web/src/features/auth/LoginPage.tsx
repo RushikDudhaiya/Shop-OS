@@ -115,9 +115,17 @@ export function LoginPage() {
             />
             {devOtp ? (
               <p className="rounded-xl bg-success-soft px-3 py-2 text-sm text-success">
-                Dev OTP: <strong>{devOtp}</strong>
+                Login OTP: <strong className="tracking-widest">{devOtp}</strong>
+                <span className="mt-1 block text-xs text-ink-muted">
+                  Abhi SMS nahi jaata — yahi OTP use karo.
+                </span>
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-ink-muted">
+                SMS aane ka wait karo. Agar OTP nahi aaya to number check karke
+                dubara request karo.
+              </p>
+            )}
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             <Button type="submit" variant="gold" size="lg" fullWidth loading={loading}>
               Verify & continue
