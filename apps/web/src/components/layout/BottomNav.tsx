@@ -9,9 +9,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-const items: { to: string; label: string; icon: LucideIcon; accent?: boolean }[] = [
+const items: { to: string; label: string; icon: LucideIcon }[] = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/bill", label: "New Bill", icon: Receipt, accent: true },
+  { to: "/bill", label: "New Bill", icon: Receipt },
   { to: "/products", label: "Products", icon: Package },
   { to: "/customers", label: "Customers", icon: Users },
   { to: "/more", label: "More", icon: MoreHorizontal },
@@ -24,7 +24,7 @@ export function BottomNav() {
       aria-label="Primary"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1 py-1.5">
-        {items.map(({ to, label, icon: Icon, accent }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
@@ -33,7 +33,6 @@ export function BottomNav() {
                 cn(
                   "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium",
                   isActive ? "text-forest" : "text-ink-muted",
-                  accent && !isActive && "text-ink",
                 )
               }
             >
@@ -42,11 +41,10 @@ export function BottomNav() {
                   <span
                     className={cn(
                       "flex size-9 items-center justify-center rounded-xl",
-                      accent && "bg-gold text-ink shadow-soft",
-                      !accent && isActive && "bg-forest/10",
+                      isActive && "bg-forest/10",
                     )}
                   >
-                    <Icon className="size-5" strokeWidth={isActive || accent ? 2.4 : 2} />
+                    <Icon className="size-5" strokeWidth={isActive ? 2.4 : 2} />
                   </span>
                   <span>{label}</span>
                 </>

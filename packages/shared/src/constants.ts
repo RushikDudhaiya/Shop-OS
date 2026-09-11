@@ -56,6 +56,7 @@ export const EXPENSE_CATEGORIES = [
   "Tea/Food",
   "Salary/Wages",
   "Repairs",
+  "Stock Purchase",
   "Other",
 ] as const;
 

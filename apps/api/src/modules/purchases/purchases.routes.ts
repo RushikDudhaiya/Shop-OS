@@ -84,6 +84,7 @@ const purchaseItemSchema = z.object({
 const createPurchaseSchema = z.object({
   supplierId: z.string().optional(),
   note: z.string().max(500).optional(),
+  purchasedAt: z.coerce.date().optional(),
   items: z.array(purchaseItemSchema).min(1),
 });
 
@@ -339,7 +340,7 @@ purchasesRouter.post(
           : undefined,
         status: "COMPLETED",
         total,
-        purchasedAt: new Date(),
+        purchasedAt: body.purchasedAt ?? new Date(),
         note: body.note,
         createdBy: req.user!._id,
       });

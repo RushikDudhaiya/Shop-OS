@@ -292,26 +292,6 @@ export function ProfitMarginPage() {
 
   const adjusting = rows.find((r) => r.productId === adjustId) ?? null;
 
-  async function applySuggested(productId: string, price: number) {
-    if (!shopId) return;
-    setSaving(true);
-    try {
-      await api(`/api/shops/${shopId}/products/${productId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ sellingPrice: price }),
-      });
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.body.message
-          : "Price update fail hui",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function saveAdjust() {
     if (!shopId || !adjustId) return;
     const price = Number(adjustPrice);
@@ -384,26 +364,29 @@ export function ProfitMarginPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink shadow-soft">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ownerView}
+                aria-label="Owner view"
+                onClick={() => setOwnerView((v) => !v)}
+                className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink shadow-soft"
+              >
                 <span>Owner view</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={ownerView}
-                  onClick={() => setOwnerView((v) => !v)}
+                <span
                   className={cn(
-                    "relative h-6 w-11 rounded-full transition-colors",
+                    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
                     ownerView ? "bg-emerald-500" : "bg-slate-300",
                   )}
                 >
                   <span
                     className={cn(
-                      "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                      ownerView ? "translate-x-5" : "translate-x-0.5",
+                      "size-5 rounded-full bg-white shadow-sm transition-transform",
+                      ownerView ? "translate-x-5" : "translate-x-0",
                     )}
                   />
-                </button>
-              </label>
+                </span>
+              </button>
               <Button
                 variant="secondary"
                 leftIcon={<Calculator className="size-4" />}
@@ -658,29 +641,10 @@ export function ProfitMarginPage() {
                       className="rounded-lg bg-ink px-2.5 py-1 text-[11px] font-semibold text-white"
                       onClick={() => {
                         setAdjustId(alert.productId);
-                        setAdjustPrice(String(alert.suggestedPrice));
+                        setAdjustPrice(String(alert.sellingPrice));
                       }}
                     >
                       Review
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-2.5 py-2">
-                    <p className="text-xs text-emerald-900">
-                      Suggested: {formatINR(alert.suggestedPrice)} (~
-                      {alert.suggestedMarginPct}% margin)
-                    </p>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() =>
-                        void applySuggested(
-                          alert.productId,
-                          alert.suggestedPrice,
-                        )
-                      }
-                      className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
-                    >
-                      Apply
                     </button>
                   </div>
                 </div>
