@@ -993,7 +993,8 @@ export function MorePage() {
                           setInviteRole(e.target.value as Role)
                         }
                       >
-                        {ROLES.filter((r) => r !== "OWNER").map((r) => (
+                        {ROLES.filter((r: Role) => r !== "OWNER").map(
+                          (r: Role) => (
                           <option key={r} value={r}>
                             {r}
                           </option>
@@ -1038,7 +1039,8 @@ export function MorePage() {
                                 )
                               }
                             >
-                              {ROLES.filter((r) => r !== "OWNER").map((r) => (
+                              {ROLES.filter((r: Role) => r !== "OWNER").map(
+                                (r: Role) => (
                                 <option key={r} value={r}>
                                   {r}
                                 </option>

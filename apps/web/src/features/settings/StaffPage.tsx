@@ -119,7 +119,7 @@ export function StaffPage() {
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
             >
-              {ROLES.filter((r) => r !== "OWNER").map((r) => (
+              {ROLES.filter((r: Role) => r !== "OWNER").map((r: Role) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -157,7 +157,8 @@ export function StaffPage() {
                       }
                       aria-label="Change role"
                     >
-                      {ROLES.filter((r) => r !== "OWNER").map((r) => (
+                      {ROLES.filter((r: Role) => r !== "OWNER").map(
+                        (r: Role) => (
                         <option key={r} value={r}>
                           {r}
                         </option>
