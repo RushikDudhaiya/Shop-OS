@@ -73,7 +73,7 @@ export function QuickAddDialog({
         if (prev.includes(".")) return prev;
         return prev ? `${prev}.` : "0.";
       }
-      if (prev === "0" && key !== "·") return key;
+      if (prev === "0") return key;
       return `${prev}${key}`;
     });
   }

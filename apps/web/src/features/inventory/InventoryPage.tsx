@@ -229,7 +229,7 @@ export function InventoryPage() {
   const now = useMemo(() => new Date(), []);
 
   const [items, setItems] = useState<StockItem[]>([]);
-  const [summary, setSummary] = useState<InventorySummary | null>(null);
+  const [, setSummary] = useState<InventorySummary | null>(null);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

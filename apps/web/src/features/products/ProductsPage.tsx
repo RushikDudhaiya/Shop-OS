@@ -167,7 +167,6 @@ function ProductCard({
   onToggleActive: () => void;
   onAddSimilar: () => void;
 }) {
-  const [qty, setQty] = useState(1);
   const cat = productCategory(product);
   const stock = stockStatus(product);
 
