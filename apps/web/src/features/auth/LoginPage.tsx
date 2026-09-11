@@ -9,6 +9,7 @@ type StartRes = {
   ok: true;
   phone: string;
   expiresInSec: number;
+  challengeId: string;
   devOtp?: string;
 };
 
@@ -23,12 +24,14 @@ export function LoginPage() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+  const [challengeId, setChallengeId] = useState<string | null>(null);
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onStart(e: FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setLoading(true);
     try {
@@ -36,8 +39,9 @@ export function LoginPage() {
         method: "POST",
         body: JSON.stringify({ phone }),
       });
+      setChallengeId(res.challengeId);
       setDevOtp(res.devOtp ?? null);
-      if (res.devOtp) setOtp(res.devOtp);
+      setOtp(res.devOtp ?? "");
       setStep("otp");
     } catch (err) {
       setError(
@@ -52,12 +56,17 @@ export function LoginPage() {
 
   async function onVerify(e: FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setLoading(true);
     try {
       const res = await api<VerifyRes>("/api/auth/verify", {
         method: "POST",
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({
+          phone,
+          otp: otp.trim(),
+          challengeId: challengeId ?? undefined,
+        }),
       });
       applySession(res);
       navigate(res.shops.length ? "/" : "/onboarding", { replace: true });
@@ -90,12 +99,20 @@ export function LoginPage() {
               autoComplete="tel"
               placeholder="9876543210"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              onChange={(e) =>
+                setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+              }
               hint="10-digit Indian mobile"
               required
             />
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" variant="primary" size="lg" fullWidth loading={loading}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={loading}
+            >
               OTP bhejo
             </Button>
           </form>
@@ -110,12 +127,15 @@ export function LoginPage() {
               autoComplete="one-time-code"
               placeholder="6 digits"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(e) =>
+                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               required
             />
             {devOtp ? (
               <p className="rounded-xl bg-success-soft px-3 py-2 text-sm text-success">
-                Login OTP: <strong className="tracking-widest">{devOtp}</strong>
+                Login OTP:{" "}
+                <strong className="tracking-widest">{devOtp}</strong>
                 <span className="mt-1 block text-xs text-ink-muted">
                   Abhi SMS nahi jaata — yahi OTP use karo.
                 </span>
@@ -127,7 +147,13 @@ export function LoginPage() {
               </p>
             )}
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" variant="gold" size="lg" fullWidth loading={loading}>
+            <Button
+              type="submit"
+              variant="gold"
+              size="lg"
+              fullWidth
+              loading={loading}
+            >
               Verify & continue
             </Button>
             <Button
@@ -138,6 +164,7 @@ export function LoginPage() {
                 setStep("phone");
                 setOtp("");
                 setDevOtp(null);
+                setChallengeId(null);
                 setError(null);
               }}
             >

@@ -33,9 +33,10 @@ describe("auth + shop membership", () => {
     const start = await request(app).post("/api/auth/start").send({ phone });
     expect(start.status).toBe(200);
     const otp = start.body.devOtp as string;
+    const challengeId = start.body.challengeId as string;
     const verify = await request(app)
       .post("/api/auth/verify")
-      .send({ phone, otp });
+      .send({ phone, otp, challengeId });
     expect(verify.status).toBe(200);
     const cookie = verify.headers["set-cookie"];
     expect(cookie).toBeTruthy();

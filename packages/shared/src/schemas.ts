@@ -151,7 +151,11 @@ export const authStartSchema = z.object({
 
 export const authVerifySchema = z.object({
   phone: phoneSchema,
-  otp: z.string().regex(/^\d{4,6}$/, "Enter a valid OTP"),
+  otp: z
+    .string()
+    .trim()
+    .regex(/^\d{4,6}$/, "Enter a valid OTP"),
+  challengeId: z.string().min(1).optional(),
 });
 
 export const membershipRoleSchema = z.enum(ROLES);
