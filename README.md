@@ -63,3 +63,4 @@ npm run build
 - Products CSV import, Quick items, Add & Sell
 - Offline sales queued in IndexedDB, sync on reconnect
 - Cashier cannot see purchase cost / profit
+"# Shop-OS" 
