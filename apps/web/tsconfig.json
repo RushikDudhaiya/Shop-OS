@@ -18,7 +18,8 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@shop-os/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["src"]
