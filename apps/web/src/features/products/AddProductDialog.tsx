@@ -33,7 +33,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
   initialName?: string;
+  /** When set, dialog edits this product instead of creating. */
+  product?: Product | null;
   onCreated: (product: Product) => void;
+  onUpdated?: (product: Product) => void;
+  onDeleted?: (productId: string) => void;
 };
 
 type CategoryOption = { _id: string; name: string };
@@ -92,16 +96,20 @@ export function AddProductDialog({
   open,
   onClose,
   initialName = "",
+  product = null,
   onCreated,
+  onUpdated,
+  onDeleted,
 }: Props) {
   const titleId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
+  const editing = Boolean(product?._id);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [name, setName] = useState("");
   const [categoryName, setCategoryName] = useState("Snacks");
   const [unit, setUnit] = useState<string>("pack");
   const [barcode, setBarcode] = useState("");
-  const [gst, setGst] = useState("12");
+  const [gst, setGst] = useState("0");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [openingStock, setOpeningStock] = useState("");
@@ -111,28 +119,61 @@ export function AddProductDialog({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [previewQty, setPreviewQty] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initialStockRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setName(initialName);
-    setCategoryName(
-      initialName
-        ? inferProductCategoryGroup(initialName, "piece")
-        : "Snacks",
-    );
-    setUnit("pack");
-    setBarcode("");
-    setGst("12");
-    setPurchasePrice("");
-    setSellingPrice("");
-    setOpeningStock("");
-    setMinStock("5");
-    setDescription("");
-    setActive(true);
-    setImageUrl(null);
+    if (product) {
+      setName(product.name);
+      setCategoryName(inferProductCategoryGroup(product.name, product.unit));
+      setUnit(product.unit || "pack");
+      setBarcode(product.barcode ?? "");
+      setGst("0");
+      setPurchasePrice(
+        product.purchasePrice != null && product.purchasePrice !== undefined
+          ? String(product.purchasePrice)
+          : "",
+      );
+      setSellingPrice(String(product.sellingPrice ?? ""));
+      const stock =
+        product.availableStock != null && Number.isFinite(product.availableStock)
+          ? product.availableStock
+          : 0;
+      initialStockRef.current = stock;
+      setOpeningStock(String(stock));
+      setMinStock(
+        product.minStock != null && Number.isFinite(product.minStock)
+          ? String(product.minStock)
+          : "5",
+      );
+      setDescription("");
+      setActive(product.active !== false);
+      setImageUrl(product.imageUrl ?? null);
+    } else {
+      initialStockRef.current = null;
+      setName(initialName);
+      setCategoryName(
+        initialName
+          ? inferProductCategoryGroup(initialName, "piece")
+          : "Snacks",
+      );
+      setUnit("pack");
+      setBarcode("");
+      setGst("0");
+      setPurchasePrice("");
+      setSellingPrice("");
+      setOpeningStock("");
+      setMinStock("5");
+      setDescription("");
+      setActive(true);
+      setImageUrl(null);
+    }
     setPreviewQty(1);
     setError(null);
+    setConfirmDelete(false);
 
     void (async () => {
       try {
@@ -140,11 +181,15 @@ export function AddProductDialog({
           `/api/shops/${shopId}/categories`,
         );
         setCategories(res.categories);
+        if (product?.categoryId) {
+          const match = res.categories.find((c) => c._id === product.categoryId);
+          if (match) setCategoryName(match.name);
+        }
       } catch {
         setCategories([]);
       }
     })();
-  }, [open, initialName, shopId]);
+  }, [open, initialName, shopId, product]);
 
   const categoryOptions = useMemo(() => {
     const names = new Set([
@@ -226,6 +271,59 @@ export function AddProductDialog({
       const purchase = Number(purchasePrice);
       const opening = Number(openingStock);
       const low = Number(minStock);
+
+      if (editing && product) {
+        const patched = await api<{ product: Product }>(
+          `/api/shops/${shopId}/products/${product._id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              name: name.trim(),
+              categoryId,
+              barcode: barcode.trim() || undefined,
+              unit,
+              sellingPrice: sell,
+              purchasePrice:
+                Number.isFinite(purchase) && purchase >= 0
+                  ? purchase
+                  : undefined,
+              trackStock: true,
+              minStock: Number.isFinite(low) && low >= 0 ? low : undefined,
+              imageUrl: imageUrl || undefined,
+              active,
+            }),
+          },
+        );
+
+        let next = patched.product;
+        const prevStock = initialStockRef.current ?? 0;
+        const nextStock =
+          Number.isFinite(opening) && opening >= 0 ? opening : prevStock;
+        const delta = nextStock - prevStock;
+        if (Math.abs(delta) > 1e-9) {
+          await api(`/api/shops/${shopId}/inventory/adjust`, {
+            method: "POST",
+            body: JSON.stringify({
+              productId: product._id,
+              type:
+                delta > 0
+                  ? "MANUAL_ADJUSTMENT_IN"
+                  : "MANUAL_ADJUSTMENT_OUT",
+              quantityDelta: Math.abs(delta),
+              note: "Product edit — available stock",
+            }),
+          });
+          next = {
+            ...next,
+            availableStock: nextStock,
+          };
+        }
+
+        onUpdated?.(next);
+        onClose();
+        return;
+      }
+
       const res = await api<{ product: Product }>(
         `/api/shops/${shopId}/products`,
         {
@@ -250,19 +348,19 @@ export function AddProductDialog({
         },
       );
 
-      let product = res.product;
+      let created = res.product;
       if (!active) {
         const patched = await api<{ product: Product }>(
-          `/api/shops/${shopId}/products/${product._id}`,
+          `/api/shops/${shopId}/products/${created._id}`,
           {
             method: "PATCH",
             body: JSON.stringify({ active: false }),
           },
         );
-        product = patched.product;
+        created = patched.product;
       }
 
-      onCreated(product);
+      onCreated(created);
       onClose();
     } catch (err) {
       setError(
@@ -272,6 +370,28 @@ export function AddProductDialog({
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onDeleteConfirm() {
+    if (!product?._id) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api(`/api/shops/${shopId}/products/${product._id}`, {
+        method: "DELETE",
+      });
+      onDeleted?.(product._id);
+      onClose();
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError
+          ? err.body.message
+          : "Product delete nahi hua",
+      );
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -297,11 +417,12 @@ export function AddProductDialog({
               id={titleId}
               className="text-lg font-semibold text-ink sm:text-xl"
             >
-              Add New Product
+              {editing ? "Edit Product" : "Add New Product"}
             </h2>
             <p className="mt-0.5 text-sm text-ink-muted">
-              Add a new product to your shop inventory. It will be available in
-              billing, inventory and reports.
+              {editing
+                ? "Price, stock aur details update karo — billing mein turant reflect hoga."
+                : "Add a new product to your shop inventory. It will be available in billing, inventory and reports."}
             </p>
           </div>
           <button
@@ -501,7 +622,7 @@ export function AddProductDialog({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <FieldLabel>Opening Stock</FieldLabel>
+                  <FieldLabel>Available Stock</FieldLabel>
                   <FieldShell>
                     <Package className="size-4 shrink-0 text-ink-muted" />
                     <input
@@ -714,20 +835,81 @@ export function AddProductDialog({
           ) : null}
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line/70 px-4 py-4 sm:px-6">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={loading}
-            leftIcon={<Check className="size-4" />}
-          >
-            Save Product
-          </Button>
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line/70 px-4 py-4 sm:px-6">
+          <div>
+            {editing ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="!border-danger/30 !text-danger hover:!bg-danger-soft"
+                leftIcon={<Trash2 className="size-4" />}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={loading}
+              leftIcon={<Check className="size-4" />}
+            >
+              {editing ? "Save changes" : "Save Product"}
+            </Button>
+          </div>
         </footer>
       </form>
+
+      {confirmDelete ? (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4"
+          onClick={() => !deleting && setConfirmDelete(false)}
+        >
+          <div
+            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-labelledby="delete-product-title"
+          >
+            <h3
+              id="delete-product-title"
+              className="text-lg font-semibold text-ink"
+            >
+              Product delete karein?
+            </h3>
+            <p className="text-sm text-ink-muted">
+              <span className="font-semibold text-ink">{product?.name}</span>{" "}
+              billing list se hata diya jayega. Purane bills safe rahenge.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                fullWidth
+                loading={deleting}
+                className="!bg-danger hover:!bg-danger/90"
+                onClick={() => void onDeleteConfirm()}
+              >
+                Haan, delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

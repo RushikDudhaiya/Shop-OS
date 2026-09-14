@@ -516,6 +516,32 @@ productsRouter.post(
   },
 );
 
+productsRouter.delete(
+  "/:productId",
+  requireAuth,
+  requireShopMember("product.edit"),
+  async (req, res, next) => {
+    try {
+      const product = await findShopProduct(
+        req.shopContext!.shopId,
+        req.params.productId,
+      );
+      product.active = false;
+      await product.save();
+      const stock = await getAvailableStock(
+        req.shopContext!.shopId,
+        product._id,
+      );
+      res.json({
+        ok: true,
+        product: serializeProduct(product.toObject(), stock, canViewCost(req)),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 export const categoriesRouter = Router({ mergeParams: true });
 
 categoriesRouter.get(

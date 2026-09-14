@@ -24,6 +24,7 @@ import {
   Sparkles,
   Star,
   Tag,
+  Trash2,
   X,
 } from "lucide-react";
 import { getShopCatalog, inferProductCategoryGroup } from "@shop-os/shared";
@@ -157,7 +158,8 @@ function ProductCard({
   onToggleMenu,
   onFavorite,
   onToggleActive,
-  onAddSimilar,
+  onEdit,
+  onDelete,
 }: {
   product: Product;
   menuOpen: boolean;
@@ -165,7 +167,8 @@ function ProductCard({
   onToggleMenu: () => void;
   onFavorite: () => void;
   onToggleActive: () => void;
-  onAddSimilar: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const cat = productCategory(product);
   const stock = stockStatus(product);
@@ -215,8 +218,8 @@ function ProductCard({
           type="button"
           className="inline-flex size-8 items-center justify-center rounded-xl bg-[#eef1f4] text-ink hover:bg-paper-2"
           aria-label="Edit product"
-          title="Add similar"
-          onClick={onAddSimilar}
+          title="Edit product"
+          onClick={onEdit}
         >
           <Pencil className="size-3.5" />
         </button>
@@ -249,6 +252,13 @@ function ProductCard({
                 onClick={onToggleActive}
               >
                 {product.active ? "Mark inactive" : "Mark active"}
+              </button>
+              <button
+                type="button"
+                className="flex w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger-soft"
+                onClick={onDelete}
+              >
+                Delete
               </button>
             </div>
           ) : null}
@@ -352,6 +362,9 @@ export function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [initialName, setInitialName] = useState("");
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name-asc");
@@ -521,8 +534,30 @@ export function ProductsPage() {
   }
 
   function openAdd(name = "") {
+    setEditingProduct(null);
     setInitialName(name || q);
     setDialogOpen(true);
+  }
+
+  function openEdit(product: Product) {
+    setInitialName("");
+    setEditingProduct(product);
+    setDialogOpen(true);
+    setMenuId(null);
+  }
+
+  async function confirmDeleteProduct() {
+    if (!shopId || !deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api(`/api/shops/${shopId}/products/${deleteTarget._id}`, {
+        method: "DELETE",
+      });
+      setDeleteTarget(null);
+      await load();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function openImport() {
@@ -839,7 +874,11 @@ export function ProductsPage() {
                     }
                     onFavorite={() => void toggleFavorite(p)}
                     onToggleActive={() => void toggleActive(p)}
-                    onAddSimilar={() => openAdd(p.name)}
+                    onEdit={() => openEdit(p)}
+                    onDelete={() => {
+                      setMenuId(null);
+                      setDeleteTarget(p);
+                    }}
                   />
                 </li>
               ))}
@@ -875,6 +914,14 @@ export function ProductsPage() {
                       <button
                         type="button"
                         className="rounded-lg p-1.5 text-ink-muted hover:bg-paper-2"
+                        aria-label="Edit product"
+                        onClick={() => openEdit(p)}
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-ink-muted hover:bg-paper-2"
                         onClick={() => void toggleFavorite(p)}
                         aria-label="Toggle favorite"
                       >
@@ -882,6 +929,14 @@ export function ProductsPage() {
                           className="size-4"
                           fill={p.isFavorite ? "currentColor" : "none"}
                         />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-danger hover:bg-danger-soft"
+                        aria-label="Delete product"
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        <Trash2 className="size-4" />
                       </button>
                     </li>
                   );
@@ -1053,9 +1108,70 @@ export function ProductsPage() {
         shopId={shopId}
         open={dialogOpen}
         initialName={initialName}
-        onClose={() => setDialogOpen(false)}
+        product={editingProduct}
+        onClose={() => {
+          setDialogOpen(false);
+          setEditingProduct(null);
+        }}
         onCreated={() => void load()}
+        onUpdated={() => void load()}
+        onDeleted={() => void load()}
       />
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4"
+          onClick={() => !deleting && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-labelledby="delete-product-list-title"
+          >
+            <div className="flex items-start gap-3">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-danger-soft text-danger">
+                <Trash2 className="size-5" />
+              </span>
+              <div>
+                <h3
+                  id="delete-product-list-title"
+                  className="text-lg font-semibold text-ink"
+                >
+                  Product delete karein?
+                </h3>
+                <p className="mt-1 text-sm text-ink-muted">
+                  <span className="font-semibold text-ink">
+                    {deleteTarget.name}
+                  </span>{" "}
+                  list se hata diya jayega. Purane bills safe rahenge.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                fullWidth
+                loading={deleting}
+                className="!bg-danger hover:!bg-danger/90"
+                onClick={() => void confirmDeleteProduct()}
+              >
+                Haan, delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

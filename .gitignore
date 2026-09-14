@@ -10,3 +10,6 @@ coverage/
 .vite/
 *.tsbuildinfo
 apps/web/dev-dist/
+
+.vercel
+.env*

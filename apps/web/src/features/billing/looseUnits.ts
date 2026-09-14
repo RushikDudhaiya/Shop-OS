@@ -129,6 +129,18 @@ export function resolveLooseSale(p: LooseProduct): {
     };
   }
 
+  // Plain pack/bag sold by weight (250g / 1kg picker in New Bill)
+  const WEIGHT_PACK = new Set(["bag", "packet", "pack", "pkt"]);
+  if (WEIGHT_PACK.has(unit)) {
+    return {
+      loose: true,
+      billingUnit: "kg",
+      pricePerBillingUnit: p.sellingPrice,
+      toStockQty: (q) => q,
+      toBillingQty: (q) => q,
+    };
+  }
+
   return {
     loose: false,
     billingUnit: unit,

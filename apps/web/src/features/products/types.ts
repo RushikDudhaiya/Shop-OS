@@ -11,6 +11,7 @@ export type Product = {
   availableStock: number | null;
   unit: string;
   barcode?: string | null;
+  categoryId?: string | null;
   /** Optional photo URL — phone camera / upload later */
   imageUrl?: string | null;
 };
