@@ -2066,8 +2066,8 @@ export function BillPage() {
                 <div className="bill-cart-footer-rows is-compact">
                   {subtotalRow}
                   {cgstRow}
-                  {discountRow}
                   {sgstRow}
+                  {discountRow}
                   {roundOffRow}
                 </div>
                 {discountOpen ? (
