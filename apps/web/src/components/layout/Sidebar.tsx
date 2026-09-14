@@ -125,6 +125,7 @@ export function Sidebar({ className }: { className?: string }) {
     <aside
       className={cn(
         "sticky top-0 hidden h-dvh w-[220px] min-w-[220px] max-w-[220px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#0b2f24] md:flex xl:w-[250px] xl:min-w-[250px] xl:max-w-[250px]",
+        "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
       )}
       style={{

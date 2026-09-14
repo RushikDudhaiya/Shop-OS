@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ROLES, type Role } from "@shop-os/shared";
 import { Users } from "lucide-react";
 import {
+  AppPageHeader,
   Badge,
   Button,
   EmptyState,
   Input,
-  PageHeader,
   PageLoader,
   Surface,
 } from "@/components/ui";
@@ -91,7 +91,7 @@ export function StaffPage() {
 
   return (
     <div className="w-full space-y-4">
-      <PageHeader
+      <AppPageHeader
         title="Staff"
         subtitle="Cashier ko cost/profit nahi dikhta. Roles audited."
       />

@@ -11,11 +11,11 @@ import {
   IndianRupee,
   Plus,
   Search,
-  Sparkles,
   TrendingUp,
   X,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Button,
   EmptyState,
   Input,
@@ -96,12 +96,6 @@ const CATEGORY_COLORS = [
   "#3b82f6",
   "#94a3b8",
 ];
-
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 function ProductThumb({
   name,
@@ -216,7 +210,6 @@ export function ProfitMarginPage() {
   const [simOpen, setSimOpen] = useState(false);
   const [simCost, setSimCost] = useState("");
   const [simSell, setSimSell] = useState("");
-  const now = useMemo(() => new Date(), []);
 
   const load = useCallback(async () => {
     if (!shopId) return;
@@ -320,34 +313,24 @@ export function ProfitMarginPage() {
 
   if (!shopId) return <PageLoader />;
 
-  const greeting = greetingForHour(now.getHours());
-
   return (
     <div className="mx-auto w-full max-w-7xl pb-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1 space-y-5">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-gold" />
-                <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-                  {greeting}, {roleLabel}{" "}
-                  <span aria-hidden>👋</span>
-                </h1>
+          <AppPageHeader
+            title="Profit Margin"
+            subtitle="Customers ko sirf selling price dikhta hai — aapko real munafa."
+            action={
+              <div className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft md:inline-flex">
+                <span className="flex size-7 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-semibold text-white">
+                  {(activeShop?.name ?? "S").slice(0, 1).toUpperCase()}
+                </span>
+                <span className="max-w-[140px] truncate font-medium">
+                  {activeShop?.name ?? "Shop"}, {roleLabel}
+                </span>
               </div>
-              <p className="mt-1 text-sm text-ink-muted">
-                Customers ko sirf selling price dikhta hai — aapko real munafa.
-              </p>
-            </div>
-            <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft">
-              <span className="flex size-7 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-semibold text-white">
-                {(activeShop?.name ?? "S").slice(0, 1).toUpperCase()}
-              </span>
-              <span className="max-w-[140px] truncate font-medium">
-                {activeShop?.name ?? "Shop"}, {roleLabel}
-              </span>
-            </div>
-          </header>
+            }
+          />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">

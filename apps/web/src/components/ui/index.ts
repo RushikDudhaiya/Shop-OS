@@ -4,6 +4,7 @@ export { DropdownMenu } from "./DropdownMenu";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { PageHeader } from "./PageHeader";
+export { AppPageHeader } from "../layout/AppPageHeader";
 export { Pagination } from "./Pagination";
 export { PageLoader, Spinner } from "./Spinner";
 export { Surface } from "./Surface";

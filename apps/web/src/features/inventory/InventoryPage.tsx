@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   Boxes,
   CalendarDays,
-  Info,
+  Filter,
   Pencil,
   Plus,
   Search,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { inferProductCategoryGroup } from "@shop-os/shared";
 import {
+  AppPageHeader,
   Badge,
   Button,
   EmptyState,
@@ -94,12 +95,6 @@ const STOCK_OUT_REASONS: StockOutReason[] = [
   "Personal use",
   "Stock correction",
 ];
-
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 function formatDashboardDate(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -913,15 +908,38 @@ function StockOutModal({
   );
 }
 
+function statusPillClass(status: StockStatus) {
+  if (status === "out") return "bg-rose-50 text-rose-700";
+  if (status === "low") return "bg-amber-50 text-amber-800";
+  return "bg-emerald-50 text-emerald-700";
+}
+
+function statusShortLabel(status: StockStatus) {
+  if (status === "out") return "Out";
+  if (status === "low") return "Low";
+  return "In stock";
+}
+
+function categoryPillClass(name: string) {
+  const n = name.toLowerCase();
+  if (n.includes("dairy") || n.includes("milk")) {
+    return "bg-sky-50 text-sky-700";
+  }
+  if (n.includes("veg") || n.includes("fruit")) {
+    return "bg-emerald-50 text-emerald-700";
+  }
+  if (n.includes("baker") || n.includes("bread")) {
+    return "bg-rose-50 text-rose-700";
+  }
+  if (n.includes("snack") || n.includes("groc")) {
+    return "bg-amber-50 text-amber-800";
+  }
+  return "bg-paper-2 text-ink-muted";
+}
+
 export function InventoryPage() {
   const { activeShop } = useAuth();
   const shopId = activeShop?._id;
-  const roleLabel =
-    activeShop?.role === "OWNER"
-      ? "Owner"
-      : activeShop?.role
-        ? activeShop.role.charAt(0) + activeShop.role.slice(1).toLowerCase()
-        : "Team";
   const now = useMemo(() => new Date(), []);
 
   const [items, setItems] = useState<StockItem[]>([]);
@@ -947,6 +965,8 @@ export function InventoryPage() {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [sessionKharcha, setSessionKharcha] = useState({ total: 0, count: 0 });
   const [stockNotice, setStockNotice] = useState<string | null>(null);
+  const [tipOpen, setTipOpen] = useState(true);
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!shopId) return;
@@ -1089,36 +1109,239 @@ export function InventoryPage() {
 
   if (!shopId) return <PageLoader />;
 
-  const greeting = greetingForHour(now.getHours());
+  const asidePanels = !loading && !loadError ? (
+    <>
+      <Surface className="space-y-3 p-4">
+        <h3 className="text-base font-bold text-ink sm:text-sm sm:font-semibold">
+          Stock status
+        </h3>
+        <div className="flex items-center gap-4">
+          <StockStatusDonut
+            inStock={stats.inStock}
+            low={stats.low}
+            out={stats.out}
+            total={stats.totalSkus}
+          />
+          <ul className="min-w-0 flex-1 space-y-2 text-sm">
+            <li className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-ink-muted">
+                <span className="size-2.5 rounded-full bg-[#0d3d2a]" />
+                In stock
+              </span>
+              <span className="font-semibold text-ink">{stats.inStock}</span>
+            </li>
+            <li className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-ink-muted">
+                <span className="size-2.5 rounded-full bg-[#f2b705]" />
+                Low stock
+              </span>
+              <span className="font-semibold text-ink">{stats.low}</span>
+            </li>
+            <li className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-ink-muted">
+                <span className="size-2.5 rounded-full bg-[#c0392b]" />
+                Out of stock
+              </span>
+              <span className="font-semibold text-ink">{stats.out}</span>
+            </li>
+          </ul>
+        </div>
+      </Surface>
+
+      <section>
+        <h3 className="mb-2 text-base font-bold text-ink">
+          Stock kharcha (session)
+        </h3>
+        <div className="rounded-2xl border border-amber-100 bg-[#FFF4E5] p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-display text-2xl font-semibold text-amber-950">
+                {formatINR(sessionKharcha.total)}
+              </p>
+              <p className="mt-1 text-xs text-amber-900/70">
+                {sessionKharcha.count} purchase
+                {sessionKharcha.count === 1 ? "" : "s"} logged
+              </p>
+            </div>
+            <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white/70 text-amber-800">
+              <Wallet className="size-5" />
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-base font-bold text-ink">
+          Recent purchase bills
+        </h3>
+        <Surface className="p-4">
+          {recentPurchases.length === 0 ? (
+            <p className="py-2 text-center text-sm text-ink-muted">
+              Abhi tak koi purchase bill nahi
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {recentPurchases.map((p) => (
+                <li
+                  key={p._id}
+                  className="flex items-start justify-between gap-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-ink">
+                      {p.items?.[0]?.name ?? p.supplierName ?? "Purchase"}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      {formatBillDate(p.purchasedAt)}
+                      {p.supplierName ? ` · ${p.supplierName}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-semibold text-ink">
+                    {formatINR(p.total)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Surface>
+      </section>
+
+      <section>
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="text-base font-bold text-ink">Categories</h3>
+          <span className="inline-flex size-6 items-center justify-center rounded-full bg-paper-2 text-[11px] font-semibold text-ink-muted">
+            {stats.categoryCount}
+          </span>
+        </div>
+        <Surface className="overflow-hidden !p-0">
+          <ul className="divide-y divide-line/70">
+            {categoryCounts.length === 0 ? (
+              <li className="px-4 py-4 text-sm text-ink-muted">
+                No categories yet.
+              </li>
+            ) : (
+              categoryCounts.map((c) => (
+                <li
+                  key={c.name}
+                  className="flex items-center gap-2 px-3 py-2.5"
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    onClick={() => {
+                      setCategoryFilter(c.name);
+                      setStockFilter("all");
+                    }}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex size-9 shrink-0 items-center justify-center rounded-xl text-base",
+                        categoryPillClass(c.name),
+                      )}
+                      aria-hidden
+                    >
+                      {categoryArtFor(c.name, "piece").emoji}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                      {c.name}
+                    </span>
+                    <span className="text-xs text-ink-muted">{c.count}</span>
+                  </button>
+                  <span className="inline-flex gap-0.5 text-ink-muted">
+                    <span className="rounded-lg p-1.5 opacity-45" title="Edit coming soon">
+                      <Pencil className="size-3.5" />
+                    </span>
+                    <span className="rounded-lg p-1.5 opacity-45" title="Delete coming soon">
+                      <Trash2 className="size-3.5" />
+                    </span>
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
+          <button
+            type="button"
+            className="m-3 flex h-11 w-[calc(100%-1.5rem)] items-center justify-center gap-1.5 rounded-xl border border-dashed border-forest/40 bg-white text-sm font-semibold text-forest"
+            onClick={() => setAddCategoryOpen(true)}
+          >
+            <Plus className="size-4" />
+            Add category
+          </button>
+        </Surface>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-base font-bold text-ink">Low stock alerts</h3>
+        <Surface className="overflow-hidden !p-0">
+          {lowAlerts.length === 0 ? (
+            <p className="px-4 py-5 text-sm text-ink-muted">
+              Sab stock theek hai.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line/70">
+              {lowAlerts.map((item) => (
+                <li
+                  key={item.productId}
+                  className="flex items-center gap-2.5 px-3 py-3"
+                >
+                  <ProductThumb item={item} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-ink">
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      {displayStatus(item) === "out"
+                        ? "Out of stock"
+                        : `${item.availableStock} left`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg bg-forest px-3 py-1.5 text-xs font-semibold text-white"
+                    onClick={() => openAddStock(item)}
+                  >
+                    Restock
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Surface>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-base font-bold text-ink">Recent movements</h3>
+        <Surface className="p-4">
+          <p className="py-3 text-center text-sm text-ink-muted">
+            Abhi tak koi movement nahi
+          </p>
+        </Surface>
+      </section>
+    </>
+  ) : null;
 
   return (
     <div className="mx-auto w-full max-w-7xl pb-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1 space-y-5">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-                {greeting}, {roleLabel}{" "}
-                <span aria-hidden>👋</span>
-              </h1>
-              <p className="mt-1 text-sm text-ink-muted">
-                Stock levels, purchases aur kharcha — sab jude hue.
-              </p>
-            </div>
-            <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft">
-              <CalendarDays className="size-4 text-forest" />
-              {formatDashboardDate(now)}
-            </div>
-          </header>
+        <div className="min-w-0 flex-1 space-y-4 sm:space-y-5">
+          <AppPageHeader
+            title="Inventory"
+            subtitle="Stock, purchases aur kharcha — sab jude hue ✌️"
+            action={
+              <div className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft md:inline-flex">
+                <CalendarDays className="size-4 text-forest" />
+                {formatDashboardDate(now)}
+              </div>
+            }
+          />
 
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="hidden flex-wrap items-start justify-between gap-3 md:flex">
             <div className="flex min-w-0 items-start gap-2.5">
               <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
                 <Boxes className="size-5" />
               </span>
               <div>
                 <h2 className="font-display text-xl font-semibold text-ink sm:text-2xl">
-                  Inventory
+                  Stock overview
                 </h2>
                 <p className="text-sm text-ink-muted">
                   Har stock entry ek purchase hai — cost track karein, kharcha
@@ -1147,18 +1370,25 @@ export function InventoryPage() {
             </div>
           </div>
 
-          <div className="flex gap-3 rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3.5">
-            <Info className="mt-0.5 size-5 shrink-0 text-sky-700" />
-            <div className="min-w-0 text-sm text-sky-950">
-              <p className="font-semibold">Add Stock = ek chhota purchase</p>
-              <p className="mt-1 text-sky-900/80">
-                Jab bhi stock add karte ho, woh kahin se kharida gaya hai.
-                Isliye Add Stock quantity, cost price aur supplier maangta hai.
-                Naya item? &quot;+ New product&quot; se create karo. Save par
-                purchase bill + Kharcha (Stock Purchase) entry ban jaati hai.
+          {tipOpen ? (
+            <div className="relative rounded-2xl border border-violet-100 bg-violet-50/90 px-4 py-3.5">
+              <button
+                type="button"
+                className="absolute right-3 top-3 rounded-lg p-1 text-violet-400 hover:bg-violet-100 hover:text-violet-700"
+                onClick={() => setTipOpen(false)}
+                aria-label="Dismiss"
+              >
+                <X className="size-4" />
+              </button>
+              <p className="pr-6 text-sm font-bold text-ink">
+                Add Stock = ek chhota purchase
+              </p>
+              <p className="mt-1 pr-4 text-sm text-ink-muted">
+                Quantity, cost price aur supplier daalein — bill apne aap banegi
+                aur kharcha mein chali jaayegi.
               </p>
             </div>
-          </div>
+          ) : null}
 
           {stockNotice ? (
             <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -1185,72 +1415,57 @@ export function InventoryPage() {
             />
           ) : (
             <>
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Surface className="space-y-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
-                      <ShoppingCart className="size-4" />
-                    </span>
-                    <p className="text-sm text-ink-muted">Total stock value</p>
-                  </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+              {/* KPI — 2×2 on mobile, 4-up on desktop */}
+              <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+                <Surface className="space-y-1.5 !p-3 sm:!p-4">
+                  <span className="inline-flex size-8 items-center justify-center rounded-xl bg-sky-50 text-sky-700 sm:size-9">
+                    <ShoppingCart className="size-3.5 sm:size-4" />
+                  </span>
+                  <p className="text-xs text-ink-muted sm:text-sm">
+                    Stock value
+                  </p>
+                  <p className="text-base font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                     {formatINR(stats.totalValue)}
                   </p>
-                  <p className="text-xs text-ink-muted">
-                    At cost price · {stats.totalSkus} SKUs
-                  </p>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                      <ShoppingBag className="size-4" />
-                    </span>
-                    <p className="text-sm text-ink-muted">Total SKUs</p>
-                  </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                <Surface className="space-y-1.5 !p-3 sm:!p-4">
+                  <span className="inline-flex size-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 sm:size-9">
+                    <ShoppingBag className="size-3.5 sm:size-4" />
+                  </span>
+                  <p className="text-xs text-ink-muted sm:text-sm">
+                    Total SKUs
+                  </p>
+                  <p className="text-base font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                     {stats.totalSkus}
                   </p>
-                  <p className="text-xs text-ink-muted">
-                    {stats.categoryCount} categories
-                  </p>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                      <AlertTriangle className="size-4" />
-                    </span>
-                    <p className="text-sm text-ink-muted">Low stock</p>
-                  </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                <Surface className="space-y-1.5 !p-3 sm:!p-4">
+                  <span className="inline-flex size-8 items-center justify-center rounded-xl bg-amber-50 text-amber-700 sm:size-9">
+                    <AlertTriangle className="size-3.5 sm:size-4" />
+                  </span>
+                  <p className="text-xs text-ink-muted sm:text-sm">
+                    Low stock
+                  </p>
+                  <p className="text-base font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                     {stats.low}
                   </p>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-forest hover:underline"
-                    onClick={() => {
-                      setStockFilter("low");
-                      setCategoryFilter("All");
-                    }}
-                  >
-                    View →
-                  </button>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-red-50 text-red-700">
-                      <AlertTriangle className="size-4" />
-                    </span>
-                    <p className="text-sm text-ink-muted">Out of stock</p>
-                  </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                <Surface className="space-y-1.5 !p-3 sm:!p-4">
+                  <span className="inline-flex size-8 items-center justify-center rounded-xl bg-red-50 text-red-700 sm:size-9">
+                    <AlertTriangle className="size-3.5 sm:size-4" />
+                  </span>
+                  <p className="text-xs text-ink-muted sm:text-sm">
+                    Out of stock
+                  </p>
+                  <p className="text-base font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                     {stats.out}
                   </p>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-forest hover:underline"
+                    className="hidden text-xs font-semibold text-forest hover:underline sm:inline"
                     onClick={() => {
                       setStockFilter("out");
                       setCategoryFilter("All");
@@ -1261,7 +1476,7 @@ export function InventoryPage() {
                 </Surface>
               </section>
 
-              <section className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <section className="flex items-center gap-2">
                 <div className="relative min-w-0 flex-1">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
                   <input
@@ -1272,8 +1487,16 @@ export function InventoryPage() {
                     aria-label="Search inventory"
                   />
                 </div>
+                <button
+                  type="button"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-soft md:hidden"
+                  onClick={() => setSortSheetOpen(true)}
+                  aria-label="Sort"
+                >
+                  <Filter className="size-4" />
+                </button>
                 <select
-                  className="h-11 rounded-xl border border-line bg-white px-3 text-sm text-ink"
+                  className="hidden h-11 rounded-xl border border-line bg-white px-3 text-sm text-ink md:block"
                   value={sortKey}
                   onChange={(e) => setSortKey(e.target.value as SortKey)}
                   aria-label="Sort inventory"
@@ -1286,16 +1509,15 @@ export function InventoryPage() {
                 </select>
               </section>
 
-              <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0">
+              <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
                   type="button"
                   onClick={() => {
                     setCategoryFilter("All");
-                    setStockFilter("all");
                   }}
                   className={cn(
                     "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors",
-                    categoryFilter === "All" && stockFilter === "all"
+                    categoryFilter === "All"
                       ? "bg-[#1a1c2e] text-white shadow-soft"
                       : "border border-line bg-white text-ink-muted hover:bg-paper-2",
                   )}
@@ -1306,10 +1528,7 @@ export function InventoryPage() {
                   <button
                     key={c.name}
                     type="button"
-                    onClick={() => {
-                      setCategoryFilter(c.name);
-                      setStockFilter("all");
-                    }}
+                    onClick={() => setCategoryFilter(c.name)}
                     className={cn(
                       "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors",
                       categoryFilter === c.name
@@ -1323,15 +1542,41 @@ export function InventoryPage() {
                     {c.name} ({c.count})
                   </button>
                 ))}
-                <button
-                  type="button"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-forest/30 bg-white px-3 py-1.5 text-sm font-semibold text-forest hover:bg-forest/5"
-                  onClick={() => setAddCategoryOpen(true)}
-                >
-                  <Plus className="size-3.5" />
-                  Add category
-                </button>
               </div>
+
+              {/* Stock status tabs — mock */}
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    ["all", "All"],
+                    ["low", "Low stock"],
+                    ["out", "Out of stock"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStockFilter(key)}
+                    className={cn(
+                      "rounded-xl border px-2 py-2.5 text-center text-xs font-semibold sm:text-sm",
+                      stockFilter === key
+                        ? "border-forest bg-emerald-50 text-forest"
+                        : "border-line bg-white text-ink-muted",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                variant="primary"
+                className="w-full md:hidden"
+                leftIcon={<Plus className="size-4" />}
+                onClick={() => openAddStock(null)}
+              >
+                Add stock
+              </Button>
 
               {filtered.length === 0 ? (
                 <EmptyState
@@ -1439,62 +1684,96 @@ export function InventoryPage() {
                     />
                   </Surface>
 
-                  <ul className="space-y-2 md:hidden">
+                  {/* Mobile product cards — mock */}
+                  <ul className="space-y-3 md:hidden">
                     {pagedItems.map((item) => {
+                      const cat = itemCategory(item);
                       const status = displayStatus(item);
+                      const cost = lastCost(item);
                       return (
-                      <li key={item.productId}>
-                        <Surface className="space-y-3 !p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-3">
+                        <li key={item.productId}>
+                          <div className="rounded-2xl border border-line/80 bg-white p-3.5 shadow-soft">
+                            <div className="flex items-start gap-3">
                               <ProductThumb item={item} />
-                              <div className="min-w-0">
-                                <p className="truncate font-semibold text-ink">
-                                  {item.name}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-bold text-ink">
+                                      {item.name}
+                                    </p>
+                                    <span
+                                      className={cn(
+                                        "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                        categoryPillClass(cat),
+                                      )}
+                                    >
+                                      <span aria-hidden>
+                                        {categoryArtFor(cat, item.unit).emoji}
+                                      </span>
+                                      {cat}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                      statusPillClass(status),
+                                    )}
+                                  >
+                                    {statusShortLabel(status)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                              <div className="rounded-xl bg-paper-2/80 px-2.5 py-2">
+                                <p className="text-[10px] text-ink-muted">
+                                  Stock
                                 </p>
-                                <p className="text-xs text-ink-muted">
-                                  {itemCategory(item)} · Stock{" "}
+                                <p className="mt-0.5 text-sm font-bold text-ink">
                                   {item.availableStock}
                                 </p>
                               </div>
+                              <div className="rounded-xl bg-paper-2/80 px-2.5 py-2">
+                                <p className="text-[10px] text-ink-muted">
+                                  Cost
+                                </p>
+                                <p className="mt-0.5 text-sm font-bold text-ink">
+                                  {cost != null ? formatINR(cost) : "—"}
+                                </p>
+                              </div>
+                              <div className="rounded-xl bg-paper-2/80 px-2.5 py-2">
+                                <p className="text-[10px] text-ink-muted">
+                                  Value
+                                </p>
+                                <p className="mt-0.5 text-sm font-bold text-ink">
+                                  {formatINR(stockValue(item))}
+                                </p>
+                              </div>
                             </div>
-                            <Badge tone={statusTone(status)}>
-                              {statusLabel(status)}
-                            </Badge>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-50 text-sm font-semibold text-emerald-700"
+                                onClick={() => openAddStock(item)}
+                              >
+                                + Stock in
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex h-10 items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-rose-700"
+                                onClick={() => setStockOutFor(item)}
+                              >
+                                − Stock out
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-ink-muted">
-                              Last cost{" "}
-                              {lastCost(item) != null
-                                ? formatINR(lastCost(item)!)
-                                : "—"}
-                            </span>
-                            <span className="font-semibold text-ink">
-                              {formatINR(stockValue(item))}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700"
-                              onClick={() => openAddStock(item)}
-                            >
-                              + Stock in
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 items-center rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-700"
-                              onClick={() => setStockOutFor(item)}
-                            >
-                              − Stock out
-                            </button>
-                          </div>
-                        </Surface>
-                      </li>
+                        </li>
                       );
                     })}
                   </ul>
-                  <Surface padded={false} className="overflow-hidden md:hidden">
+                  <div className="md:hidden">
                     <Pagination
                       page={page}
                       pageSize={PAGE_SIZE}
@@ -1502,199 +1781,19 @@ export function InventoryPage() {
                       noun="products"
                       onPageChange={setPage}
                     />
-                  </Surface>
+                  </div>
                 </>
               )}
+
+              {/* Mobile stacked panels */}
+              <div className="space-y-4 md:hidden">{asidePanels}</div>
             </>
           )}
         </div>
 
         {!loading && !loadError ? (
-          <aside className="w-full shrink-0 space-y-4 xl:sticky xl:top-4 xl:w-[300px]">
-            <Surface className="space-y-3 p-4">
-              <h3 className="text-sm font-semibold text-ink">Stock status</h3>
-              <StockStatusDonut
-                inStock={stats.inStock}
-                low={stats.low}
-                out={stats.out}
-                total={stats.totalSkus}
-              />
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-2 text-ink-muted">
-                    <span className="size-2.5 rounded-full bg-[#0d3d2a]" />
-                    In stock
-                  </span>
-                  <span className="font-semibold text-ink">{stats.inStock}</span>
-                </li>
-                <li className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-2 text-ink-muted">
-                    <span className="size-2.5 rounded-full bg-[#f2b705]" />
-                    Low stock
-                  </span>
-                  <span className="font-semibold text-ink">{stats.low}</span>
-                </li>
-                <li className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-2 text-ink-muted">
-                    <span className="size-2.5 rounded-full bg-[#c0392b]" />
-                    Out of stock
-                  </span>
-                  <span className="font-semibold text-ink">{stats.out}</span>
-                </li>
-              </ul>
-            </Surface>
-
-            <div className="rounded-2xl border border-amber-100 bg-[#f7efe6] p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-amber-950">
-                    Stock Kharcha (session)
-                  </p>
-                  <p className="mt-2 font-display text-2xl font-semibold text-amber-950">
-                    {formatINR(sessionKharcha.total)}
-                  </p>
-                  <p className="mt-1 text-xs text-amber-900/70">
-                    {sessionKharcha.count} purchase
-                    {sessionKharcha.count === 1 ? "" : "s"} logged
-                  </p>
-                </div>
-                <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white/70 text-amber-800">
-                  <Wallet className="size-5" />
-                </span>
-              </div>
-            </div>
-
-            <Surface className="p-4">
-              <h3 className="mb-3 text-sm font-semibold text-ink">
-                Recent purchase bills
-              </h3>
-              {recentPurchases.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  Abhi tak koi purchase bill nahi
-                </p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {recentPurchases.map((p) => (
-                    <li
-                      key={p._id}
-                      className="flex items-start justify-between gap-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-ink">
-                          {p.items?.[0]?.name ??
-                            p.supplierName ??
-                            "Purchase"}
-                        </p>
-                        <p className="text-xs text-ink-muted">
-                          {formatBillDate(p.purchasedAt)}
-                          {p.supplierName ? ` · ${p.supplierName}` : ""}
-                        </p>
-                      </div>
-                      <span className="shrink-0 font-semibold text-ink">
-                        {formatINR(p.total)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Surface>
-
-            <Surface className="p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-ink">Categories</h3>
-                <span className="text-xs text-ink-muted">
-                  {stats.categoryCount} total
-                </span>
-              </div>
-              <ul className="space-y-1.5">
-                {categoryCounts.length === 0 ? (
-                  <li className="text-sm text-ink-muted">No categories yet.</li>
-                ) : (
-                  categoryCounts.slice(0, 8).map((c) => (
-                    <li
-                      key={c.name}
-                      className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-paper-2"
-                    >
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                        onClick={() => {
-                          setCategoryFilter(c.name);
-                          setStockFilter("all");
-                        }}
-                      >
-                        <span className="text-base" aria-hidden>
-                          {categoryArtFor(c.name, "piece").emoji}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
-                          {c.name}
-                        </span>
-                        <span className="text-xs text-ink-muted">{c.count}</span>
-                      </button>
-                      <span className="inline-flex gap-0.5 text-ink-muted">
-                        <span
-                          className="rounded-lg p-1 opacity-40"
-                          title="Edit coming soon"
-                        >
-                          <Pencil className="size-3.5" />
-                        </span>
-                        <span
-                          className="rounded-lg p-1 opacity-40"
-                          title="Delete coming soon"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </span>
-                      </span>
-                    </li>
-                  ))
-                )}
-              </ul>
-              <button
-                type="button"
-                className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-forest/40 py-2.5 text-sm font-semibold text-forest hover:bg-forest/5"
-                onClick={() => setAddCategoryOpen(true)}
-              >
-                <Plus className="size-4" />
-                Add category
-              </button>
-            </Surface>
-
-            <Surface className="p-4">
-              <h3 className="mb-3 text-sm font-semibold text-ink">
-                Low stock alerts
-              </h3>
-              {lowAlerts.length === 0 ? (
-                <p className="text-sm text-ink-muted">Sab stock theek hai.</p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {lowAlerts.map((item) => (
-                    <li
-                      key={item.productId}
-                      className="flex items-center gap-2.5"
-                    >
-                      <ProductThumb item={item} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-ink">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-ink-muted">
-                          {displayStatus(item) === "out"
-                            ? "Out of stock"
-                            : `${item.availableStock} left`}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-lg bg-forest px-2.5 py-1.5 text-xs font-semibold text-white"
-                        onClick={() => openAddStock(item)}
-                      >
-                        Restock
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Surface>
+          <aside className="hidden w-full shrink-0 space-y-4 md:block xl:sticky xl:top-4 xl:w-[300px]">
+            {asidePanels}
           </aside>
         ) : null}
       </div>
@@ -1772,6 +1871,60 @@ export function InventoryPage() {
               </Button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {sortSheetOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 md:hidden"
+          onClick={() => setSortSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-white shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-2">
+              <span className="h-1 w-10 rounded-full bg-line" />
+            </div>
+            <div className="flex items-center justify-between px-5 pb-2 pt-3">
+              <h2 className="text-base font-bold text-ink">Sort products</h2>
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-full bg-paper-2 text-ink-muted"
+                onClick={() => setSortSheetOpen(false)}
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <ul className="border-t border-line/70 pb-6">
+              {(
+                [
+                  ["name-asc", "Name (A–Z)"],
+                  ["name-desc", "Name (Z–A)"],
+                  ["stock-asc", "Stock (Low)"],
+                  ["stock-desc", "Stock (High)"],
+                  ["value-desc", "Stock value"],
+                ] as const
+              ).map(([key, label]) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-2 border-b border-line/70 px-5 py-3.5 text-sm font-medium text-ink"
+                    onClick={() => {
+                      setSortKey(key);
+                      setSortSheetOpen(false);
+                    }}
+                  >
+                    {label}
+                    {sortKey === key ? (
+                      <span className="text-forest">✓</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
     </div>

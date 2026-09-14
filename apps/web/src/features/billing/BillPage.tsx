@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
+  ArrowRight,
   Banknote,
   Check,
   ChevronDown,
@@ -19,12 +21,15 @@ import {
   Store,
   Trash2,
   User,
+  X,
   Zap,
 } from "lucide-react";
 import { getShopCatalog } from "@shop-os/shared";
 import {
+  AppPageHeader,
   Button,
   EmptyState,
+  Input,
   PageLoader,
   Surface,
 } from "@/components/ui";
@@ -239,6 +244,12 @@ export function BillPage() {
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [favorites, setFavorites] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [mobileCartTop, setMobileCartTop] = useState(140);
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [discountInput, setDiscountInput] = useState("");
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const holdActionsRef = useRef<HTMLDivElement | null>(null);
   const [billNote, setBillNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -287,10 +298,17 @@ export function BillPage() {
     null,
   );
   const [customerMenuOpen, setCustomerMenuOpen] = useState(false);
+  const [cartCustomerOpen, setCartCustomerOpen] = useState(false);
+  const [newCustomerMode, setNewCustomerMode] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   const [recentCustomers, setRecentCustomers] = useState<CustomerRow[]>([]);
   const [activePayMethod, setActivePayMethod] = useState<PayMethod>("CASH");
   const [heldCount, setHeldCount] = useState(0);
   const customerMenuRef = useRef<HTMLDivElement | null>(null);
+  const billClickLockUntilRef = useRef(0);
 
   const loadFavorites = useCallback(async () => {
     if (!shopId) return;
@@ -342,7 +360,7 @@ export function BillPage() {
   useEffect(() => {
     if (!shopId) return;
     void api<{ customers: CustomerRow[] }>(
-      `/api/shops/${shopId}/customers?pageSize=8`,
+      `/api/shops/${shopId}/customers?pageSize=20`,
     )
       .then((data) => setRecentCustomers(data.customers))
       .catch(() => setRecentCustomers([]));
@@ -357,16 +375,6 @@ export function BillPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (!customerMenuRef.current?.contains(e.target as Node)) {
-        setCustomerMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   useEffect(() => {
@@ -409,6 +417,125 @@ export function BillPage() {
     return () => window.clearTimeout(t);
   }, [holdMsg]);
 
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    function onChange() {
+      if (mq.matches) setCustomerMenuOpen(false);
+    }
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (cart.length === 0) setMobileCartOpen(false);
+  }, [cart.length]);
+
+  useEffect(() => {
+    if (mobileCartOpen) return;
+    setCartCustomerOpen(false);
+    setNewCustomerMode(false);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerError(null);
+  }, [mobileCartOpen]);
+
+  function closeCartCustomerPicker() {
+    setCartCustomerOpen(false);
+    setNewCustomerMode(false);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerError(null);
+  }
+
+  function openCustomerPicker() {
+    setCustomerMenuOpen(false);
+    if (cartCustomerOpen) closeCartCustomerPicker();
+    else setCartCustomerOpen(true);
+  }
+
+  function openNewCustomerForm() {
+    setCustomerMenuOpen(false);
+    setPayMethod(null);
+    setCartCustomerOpen(true);
+    setNewCustomerMode(true);
+    setNewCustomerError(null);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setMobileCartOpen(true);
+    }
+  }
+
+  async function saveNewCartCustomer() {
+    if (!shopId || !newCustomerName.trim()) return;
+    setNewCustomerSaving(true);
+    setNewCustomerError(null);
+    try {
+      const data = await api<{
+        customer: { _id: string; name: string; phone: string | null };
+      }>(`/api/shops/${shopId}/customers`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: newCustomerName.trim(),
+          phone:
+            newCustomerPhone.length === 10 ? newCustomerPhone : undefined,
+        }),
+      });
+      const existing = recentCustomers.find((c) => c._id === data.customer._id);
+      const row: CustomerRow = existing ?? {
+        _id: data.customer._id,
+        name: data.customer.name,
+        phone: data.customer.phone,
+        outstandingDue: 0,
+        lastPurchaseAt: null,
+        lastInvoiceNumber: null,
+        purchaseCount: 0,
+        purchaseTotal: 0,
+      };
+      setSelectedCustomer({
+        ...row,
+        name: data.customer.name,
+        phone: data.customer.phone,
+      });
+      setRecentCustomers((prev) =>
+        [
+          { ...row, name: data.customer.name, phone: data.customer.phone },
+          ...prev.filter((c) => c._id !== row._id),
+        ].slice(0, 20),
+      );
+      // Prevent Save tap from also hitting Create Bill underneath.
+      billClickLockUntilRef.current = Date.now() + 500;
+      closeCartCustomerPicker();
+    } catch (err) {
+      setNewCustomerError(
+        err instanceof ApiRequestError ? err.body.message : "Create fail",
+      );
+    } finally {
+      setNewCustomerSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!mobileCartOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileCartOpen]);
+
+  useLayoutEffect(() => {
+    function measureCartTop() {
+      const el = holdActionsRef.current;
+      if (!el) return;
+      const bottom = el.getBoundingClientRect().bottom;
+      // Sheet starts just below Hold Bill / Recent Bills — not above
+      setMobileCartTop(Math.max(96, Math.round(bottom + 8)));
+    }
+    measureCartTop();
+    if (!mobileCartOpen) return;
+    window.addEventListener("resize", measureCartTop);
+    return () => window.removeEventListener("resize", measureCartTop);
+  }, [mobileCartOpen]);
+
   const itemsTotal = useMemo(
     () =>
       Math.round(
@@ -418,6 +545,16 @@ export function BillPage() {
     [cart],
   );
 
+  const discountAmount = useMemo(() => {
+    if (discountPercent <= 0 || itemsTotal <= 0) return 0;
+    const pct = Math.min(100, Math.max(0, discountPercent));
+    return Math.round(((itemsTotal * pct) / 100 + Number.EPSILON) * 100) / 100;
+  }, [discountPercent, itemsTotal]);
+
+  const afterDiscount =
+    Math.round((Math.max(0, itemsTotal - discountAmount) + Number.EPSILON) * 100) /
+    100;
+
   const gstEnabled =
     Boolean(taxSettings.gstEnabled) && taxSettings.taxType !== "NONE";
   const gstRate =
@@ -426,14 +563,15 @@ export function BillPage() {
       : 0;
   const gstAmount =
     gstRate > 0
-      ? Math.round(((itemsTotal * gstRate) / 100 + Number.EPSILON) * 100) / 100
+      ? Math.round(((afterDiscount * gstRate) / 100 + Number.EPSILON) * 100) /
+        100
       : 0;
   const taxLabel =
     taxSettings.taxLabel?.trim() ||
     (taxSettings.taxType === "VAT" ? "VAT" : "GST");
 
   const beforeRound =
-    Math.round((itemsTotal + gstAmount + Number.EPSILON) * 100) / 100;
+    Math.round((afterDiscount + gstAmount + Number.EPSILON) * 100) / 100;
   const payable = Math.round(beforeRound);
   const roundOff = Math.round((payable - beforeRound) * 100) / 100;
   const chargeTotal =
@@ -528,7 +666,24 @@ export function BillPage() {
     setCart([]);
     setBillNote("");
     setNoteOpen(false);
+    setDiscountPercent(0);
+    setDiscountInput("");
+    setDiscountOpen(false);
     sessionStorage.removeItem(HOLD_KEY);
+  }
+
+  function applyDiscountPercent() {
+    const n = Number(discountInput);
+    if (!Number.isFinite(n) || n < 0) {
+      setDiscountPercent(0);
+      setDiscountInput("");
+      setDiscountOpen(false);
+      return;
+    }
+    const pct = Math.min(100, Math.round(n * 100) / 100);
+    setDiscountPercent(pct);
+    setDiscountInput(pct > 0 ? String(pct) : "");
+    setDiscountOpen(false);
   }
 
   function holdBill() {
@@ -623,7 +778,7 @@ export function BillPage() {
       lineTotal:
         Math.round(line.unitPrice * line.quantity * 100) / 100,
     }));
-    const saleDiscount = roundOff < -0.009 ? Math.abs(roundOff) : 0;
+    const saleDiscount = discountAmount;
     const completedAt = new Date().toISOString();
 
     function buildCompletedSnapshot(input: {
@@ -675,8 +830,9 @@ export function BillPage() {
             : {}),
         },
       };
-      if (roundOff > 0.009) body.tax = roundOff;
-      if (roundOff < -0.009) body.discount = Math.abs(roundOff);
+      if (gstAmount > 0.009) body.tax = gstAmount;
+      else if (roundOff > 0.009) body.tax = roundOff;
+      if (saleDiscount > 0.009) body.discount = saleDiscount;
       if (selectedCustomer?._id) {
         body.customerId = selectedCustomer._id;
       } else if (payload.method === "CREDIT") {
@@ -754,6 +910,8 @@ export function BillPage() {
 
   function handleCreateBill() {
     if (!cart.length || total <= 0) return;
+    if (Date.now() < billClickLockUntilRef.current) return;
+    if (cartCustomerOpen || newCustomerMode || newCustomerSaving) return;
     setPayError(null);
     if (activePayMethod === "CASH") {
       void completeSale({
@@ -767,15 +925,18 @@ export function BillPage() {
       void completeSale({ method: "UPI", amount: total });
       return;
     }
-    if (selectedCustomer) {
-      void completeSale({
-        method: "CREDIT",
-        customerName: selectedCustomer.name,
-        customerPhone: selectedCustomer.phone ?? undefined,
-      });
+    if (activePayMethod === "CREDIT") {
+      if (selectedCustomer) {
+        void completeSale({
+          method: "CREDIT",
+          customerName: selectedCustomer.name,
+          customerPhone: selectedCustomer.phone ?? undefined,
+        });
+        return;
+      }
+      setPayMethod("CREDIT");
       return;
     }
-    setPayMethod("CREDIT");
   }
 
   if (!shopId) return <PageLoader />;
@@ -801,48 +962,52 @@ export function BillPage() {
     <div className="bill-layout">
       <div className="bill-main">
         <div className="bill-main-top">
-        <header className="bill-page-header">
-          <div className="bill-page-header-row">
-            <h1 className="bill-page-title">
-              New Bill <span aria-hidden>✨</span>
-            </h1>
-            <div className="bill-page-actions">
-              <button
-                type="button"
-                onClick={holdBill}
-                className="bill-page-action-btn relative"
-              >
-                <Pause className="size-3.5" />
-                Hold Bill
-                {heldCount > 0 ? (
-                  <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-bold text-white">
-                    {heldCount}
-                  </span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowRecent((v) => !v)}
-                className="bill-page-action-btn"
-              >
-                <History className="size-3.5" />
-                Recent Bills
-              </button>
-              <button
-                type="button"
-                onClick={() => searchRef.current?.focus()}
-                className="bill-page-action-btn"
-                data-hide-mobile="true"
-              >
-                <Keyboard className="size-3.5" />
-                Keyboard (F2)
-              </button>
-            </div>
-          </div>
-          <p className="bill-subtitle">
-            Add products to cart and complete the bill
-          </p>
-        </header>
+        <div className="relative">
+          <AppPageHeader
+            title="New Bill"
+            subtitle="Add products to cart and complete the bill."
+            action={
+              <div className="flex w-full flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={holdBill}
+                  className="bill-page-action-btn relative"
+                >
+                  <Pause className="size-3.5" />
+                  Hold Bill
+                  {heldCount > 0 ? (
+                    <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-bold text-white">
+                      {heldCount}
+                    </span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRecent((v) => !v)}
+                  className="bill-page-action-btn"
+                >
+                  <History className="size-3.5" />
+                  Recent Bills
+                </button>
+                <button
+                  type="button"
+                  onClick={() => searchRef.current?.focus()}
+                  className="bill-page-action-btn"
+                  data-hide-mobile="true"
+                >
+                  <Keyboard className="size-3.5" />
+                  Keyboard (F2)
+                </button>
+              </div>
+            }
+          />
+          {/* Cart sheet top edge = below Hold / Recent Bills row */}
+          <span
+            ref={holdActionsRef}
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-0 md:hidden"
+            aria-hidden
+          />
+        </div>
 
         {holdMsg ? (
           <p className="text-xs text-forest" role="status">
@@ -873,53 +1038,142 @@ export function BillPage() {
             <ScanBarcode className="size-4" />
             Scan
           </button>
-          <div ref={customerMenuRef} className="relative shrink-0">
+          <div
+            ref={customerMenuRef}
+            className="relative w-full sm:w-auto sm:shrink-0 lg:hidden"
+          >
             <button
               type="button"
               onClick={() => setCustomerMenuOpen((v) => !v)}
               className="bill-customer-select"
               aria-label="Select customer"
+              aria-expanded={customerMenuOpen}
             >
               <User className="size-4 shrink-0 text-ink-muted" />
               <span className="bill-customer-select-label">
                 {selectedCustomer?.name ?? "Walk-in Customer"}
               </span>
-              <ChevronDown className="size-4 shrink-0 text-ink-muted" />
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 text-ink-muted transition-transform",
+                  customerMenuOpen && "rotate-180",
+                )}
+              />
             </button>
-              {customerMenuOpen ? (
-                <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-line bg-white py-1 shadow-soft">
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-sm hover:bg-paper-2"
-                    onClick={() => {
-                      setSelectedCustomer(null);
-                      setCustomerMenuOpen(false);
-                    }}
-                  >
-                    Walk-in Customer
-                  </button>
-                  {recentCustomers.map((c) => (
+          </div>
+        </div>
+
+        {customerMenuOpen
+          ? createPortal(
+              <div className="fixed inset-0 z-[80] flex items-end justify-center lg:hidden">
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-ink/45"
+                  aria-label="Close customers"
+                  onClick={() => setCustomerMenuOpen(false)}
+                />
+                <div
+                  className="relative z-[1] w-full max-w-lg rounded-t-3xl bg-white p-4 shadow-soft"
+                  role="dialog"
+                  aria-label="Recent customers"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-base font-bold text-ink">
+                      Recent Customers
+                    </p>
                     <button
-                      key={c._id}
                       type="button"
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-paper-2"
+                      className="inline-flex size-9 items-center justify-center rounded-xl bg-paper-2 text-ink-muted"
+                      aria-label="Close"
+                      onClick={() => setCustomerMenuOpen(false)}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button
+                      type="button"
                       onClick={() => {
-                        setSelectedCustomer(c);
+                        setSelectedCustomer(null);
                         setCustomerMenuOpen(false);
                       }}
+                      className={cn(
+                        "flex min-w-[152px] items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5 text-left shadow-soft transition-colors",
+                        !selectedCustomer
+                          ? "border-forest ring-1 ring-forest/20"
+                          : "border-line hover:bg-paper-2/60",
+                      )}
                     >
-                      <span className="font-medium">{c.name}</span>
-                      {c.outstandingDue > 0 ? (
-                        <span className="ml-1 text-xs text-orange-700">
-                          Due {formatINR(c.outstandingDue)}
-                        </span>
-                      ) : null}
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-forest text-xs font-semibold text-white">
+                        W
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">
+                          Walk-in
+                        </p>
+                        <p className="text-[11px] font-medium text-ink-muted">
+                          Default
+                        </p>
+                      </div>
                     </button>
-                  ))}
+                    {recentCustomers.slice(0, 10).map((c, index) => (
+                      <button
+                        key={c._id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(c);
+                          setCustomerMenuOpen(false);
+                        }}
+                        className={cn(
+                          "flex min-w-[152px] items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5 text-left shadow-soft transition-colors",
+                          selectedCustomer?._id === c._id
+                            ? "border-forest ring-1 ring-forest/20"
+                            : "border-line hover:bg-paper-2/60",
+                        )}
+                      >
+                        {index === 0 ? (
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
+                            <Store className="size-4" />
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                              customerAvatarColor(index),
+                            )}
+                          >
+                            {customerInitials(c.name)}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-ink">
+                            {c.name}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-[11px] font-medium",
+                              customerDueTone(c),
+                            )}
+                          >
+                            Due {formatINR(c.outstandingDue)}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={openNewCustomerForm}
+                      className="flex min-w-[132px] items-center justify-center gap-1 rounded-xl border border-dashed border-line bg-white px-3 py-2.5 text-sm font-medium text-[#2563EB] shadow-soft transition-colors hover:bg-paper-2/60"
+                    >
+                      <Plus className="size-4" />
+                      New
+                    </button>
+                  </div>
                 </div>
-              ) : null}
-            </div>
-          </div>
+              </div>,
+              document.body,
+            )
+          : null}
 
         {!q.trim() ? (
           <div>
@@ -1299,7 +1553,7 @@ export function BillPage() {
             )}
             <button
               type="button"
-              onClick={() => setPayMethod("CREDIT")}
+              onClick={openNewCustomerForm}
               className="bill-recent-card flex min-w-[152px] items-center justify-center gap-1 border border-line bg-white text-sm font-medium text-[#2563EB] transition-colors hover:bg-paper-2/60"
             >
               <Plus className="size-4" />
@@ -1310,64 +1564,254 @@ export function BillPage() {
         </div>
       </div>
 
-      <Surface
-        padded={false}
-        className="bill-cart !flex !min-h-0 !flex-col !rounded-[14px] border-line"
-      >
-        <div className="bill-cart-header bg-forest">
-          <h2 className="text-lg font-bold text-white">
-            Cart{cart.length > 0 ? ` (${cart.length} Items)` : ""}
-          </h2>
-          {cart.length > 0 ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-sm font-medium text-white/90 hover:text-white"
-              onClick={clearCart}
+      {(() => {
+        const cartNode = (
+          <>
+            {mobileCartOpen ? (
+              <button
+                type="button"
+                className="fixed inset-0 z-[65] bg-ink/45 lg:hidden"
+                aria-label="Close cart"
+                onClick={() => setMobileCartOpen(false)}
+              />
+            ) : null}
+            <Surface
+              padded={false}
+              className={cn(
+                "bill-cart !flex !min-h-0 !flex-col !rounded-[14px] border-line",
+                mobileCartOpen ? "bill-cart--sheet" : "max-lg:!hidden",
+              )}
+              style={
+                mobileCartOpen
+                  ? {
+                      position: "fixed",
+                      left: 0,
+                      right: 0,
+                      top: mobileCartTop,
+                      bottom: 0,
+                      zIndex: 70,
+                      width: "100%",
+                      maxWidth: "100%",
+                      minWidth: 0,
+                      height: "auto",
+                      maxHeight: "none",
+                      margin: 0,
+                      borderRadius: "1.5rem 1.5rem 0 0",
+                      alignSelf: "auto",
+                    }
+                  : undefined
+              }
             >
-              <Trash2 className="size-3.5" />
-              Clear All
-            </button>
-          ) : null}
-        </div>
-
-        <div className="bill-cart-customer">
-          <div className="rounded-xl border border-line bg-white px-3 py-2.5 shadow-soft">
-            <div className="flex items-start gap-2.5">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-forest text-xs font-semibold text-white">
-                {selectedCustomer
-                  ? customerInitials(selectedCustomer.name)
-                  : "W"}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {selectedCustomer?.name ?? "Walk-in Customer"}
-                  </p>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-0.5 text-ink-muted hover:bg-paper-2 hover:text-forest"
-                    aria-label="Edit customer"
-                    onClick={() => setCustomerMenuOpen(true)}
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                </div>
-                <p className="text-xs text-ink-muted">
-                  {selectedCustomer
-                    ? "Customer selected"
-                    : "Add or select customer"}
-                </p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-[10px] text-ink-muted">Outstanding</p>
-                <p className="text-sm font-bold text-forest">
-                  {formatINR(selectedCustomer?.outstandingDue ?? 0)}
-                </p>
-              </div>
-            </div>
+        {mobileCartOpen ? (
+          <div className="flex justify-center pt-2 lg:hidden" aria-hidden>
+            <span className="h-1 w-10 rounded-full bg-line" />
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "bill-cart-header",
+            !mobileCartOpen && "bg-forest",
+          )}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2
+              className={cn(
+                "text-lg font-bold",
+                mobileCartOpen ? "text-ink" : "text-white",
+              )}
+            >
+              Cart{cart.length > 0 ? ` (${cart.length})` : ""}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {cart.length > 0 ? (
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-sm font-semibold",
+                  mobileCartOpen
+                    ? "text-danger hover:bg-danger-soft"
+                    : "text-white/90 hover:text-white",
+                )}
+                onClick={clearCart}
+              >
+                <Trash2 className="size-3.5" />
+                Clear
+              </button>
+            ) : null}
+            {mobileCartOpen ? (
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-xl bg-paper-2 text-ink-muted lg:hidden"
+                aria-label="Close cart"
+                onClick={() => setMobileCartOpen(false)}
+              >
+                <X className="size-4" />
+              </button>
+            ) : null}
           </div>
         </div>
 
+        <div className="bill-cart-customer">
+          <button
+            type="button"
+            className="flex w-full items-start gap-2.5 rounded-xl border border-line bg-white px-3 py-2.5 text-left shadow-soft"
+            onClick={openCustomerPicker}
+            aria-expanded={cartCustomerOpen}
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-forest text-xs font-semibold text-white">
+              {selectedCustomer
+                ? customerInitials(selectedCustomer.name)
+                : "W"}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {selectedCustomer?.name ?? "Walk-in Customer"}
+                </p>
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 shrink-0 text-ink-muted transition-transform",
+                    cartCustomerOpen && "rotate-180",
+                  )}
+                />
+              </div>
+              <p className="text-xs text-ink-muted">
+                {selectedCustomer
+                  ? "Customer selected"
+                  : "Add or select customer"}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-[10px] text-ink-muted">Outstanding</p>
+              <p className="text-sm font-bold text-forest">
+                {formatINR(selectedCustomer?.outstandingDue ?? 0)}
+              </p>
+            </div>
+          </button>
+        </div>
+
+        {cartCustomerOpen ? (
+          <div
+            className="bill-cart-customer-menu"
+            role="listbox"
+            aria-label="Select customer"
+          >
+            {newCustomerMode ? (
+              <form
+                className="flex h-full flex-col gap-2.5 p-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void saveNewCartCustomer();
+                }}
+              >
+                <p className="text-sm font-semibold text-ink">New customer</p>
+                <Input
+                  label="Name"
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="Customer name"
+                  className="!h-10"
+                />
+                <Input
+                  label="Phone (optional)"
+                  value={newCustomerPhone}
+                  onChange={(e) =>
+                    setNewCustomerPhone(
+                      e.target.value.replace(/\D/g, "").slice(0, 10),
+                    )
+                  }
+                  placeholder="10-digit mobile"
+                  inputMode="numeric"
+                  className="!h-10"
+                />
+                {newCustomerError ? (
+                  <p className="text-xs text-danger">{newCustomerError}</p>
+                ) : null}
+                <div className="mt-auto flex gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    fullWidth
+                    onClick={() => {
+                      setNewCustomerMode(false);
+                      setNewCustomerName("");
+                      setNewCustomerPhone("");
+                      setNewCustomerError(null);
+                    }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    fullWidth
+                    loading={newCustomerSaving}
+                    disabled={!newCustomerName.trim()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="py-1">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-forest hover:bg-paper-2"
+                  onClick={() => {
+                    setNewCustomerMode(true);
+                    setNewCustomerError(null);
+                  }}
+                >
+                  <span className="flex size-7 items-center justify-center rounded-full border border-dashed border-forest/40 bg-forest/5 text-forest">
+                    <Plus className="size-3.5" />
+                  </span>
+                  <span className="font-semibold">New customer</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-paper-2"
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    closeCartCustomerPicker();
+                  }}
+                >
+                  <span className="flex size-7 items-center justify-center rounded-full bg-forest text-[10px] font-bold text-white">
+                    W
+                  </span>
+                  <span className="font-medium">Walk-in Customer</span>
+                </button>
+                {recentCustomers.slice(0, 20).map((c) => (
+                  <button
+                    key={c._id}
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-paper-2"
+                    onClick={() => {
+                      setSelectedCustomer(c);
+                      closeCartCustomerPicker();
+                    }}
+                  >
+                    <span className="flex size-7 items-center justify-center rounded-full bg-paper-2 text-[10px] font-bold text-ink">
+                      {customerInitials(c.name)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {c.name}
+                    </span>
+                    {c.outstandingDue > 0 ? (
+                      <span className="shrink-0 text-xs text-orange-700">
+                        Due {formatINR(c.outstandingDue)}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
         <div
           className={cn("bill-cart-items", cart.length === 0 && "is-empty")}
         >
@@ -1523,6 +1967,7 @@ export function BillPage() {
             </>
           )}
         </div>
+        )}
 
         <div className="bill-cart-footer">
           {(() => {
@@ -1534,17 +1979,58 @@ export function BillPage() {
                 </span>
               </div>
             );
-            const discountRow = (
+            const discountRow = !discountOpen ? (
               <div className="bill-cart-footer-row">
                 <span>Discount</span>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-forest hover:underline"
-                >
-                  Apply
-                </button>
+                <div className="flex items-center gap-2">
+                  {discountAmount > 0 ? (
+                    <>
+                      <span className="bill-cart-footer-value text-forest">
+                        −{formatINR(discountAmount)}
+                        <span className="ml-1 text-[11px] font-medium text-ink-muted">
+                          ({discountPercent}%)
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-forest hover:underline"
+                        onClick={() => {
+                          setDiscountInput(
+                            discountPercent > 0
+                              ? String(discountPercent)
+                              : "",
+                          );
+                          setDiscountOpen(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-danger hover:underline"
+                        onClick={() => {
+                          setDiscountPercent(0);
+                          setDiscountInput("");
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-forest hover:underline"
+                      onClick={() => {
+                        setDiscountInput("");
+                        setDiscountOpen(true);
+                      }}
+                    >
+                      Apply
+                    </button>
+                  )}
+                </div>
               </div>
-            );
+            ) : null;
             const cgstRow =
               gstAmount > 0 ? (
                 <div className="bill-cart-footer-row is-tax">
@@ -1575,13 +2061,66 @@ export function BillPage() {
               ) : null;
 
             return (
-              <div className="bill-cart-footer-rows is-compact">
-                {subtotalRow}
-                {cgstRow}
-                {discountRow}
-                {sgstRow}
-                {roundOffRow}
-              </div>
+              <>
+                <div className="bill-cart-footer-rows is-compact">
+                  {subtotalRow}
+                  {cgstRow}
+                  {discountRow}
+                  {sgstRow}
+                  {roundOffRow}
+                </div>
+                {discountOpen ? (
+                  <div className="bill-cart-discount-editor">
+                    <label
+                      className="bill-cart-discount-editor-label"
+                      htmlFor="bill-discount-pct"
+                    >
+                      Discount %
+                    </label>
+                    <div className="bill-cart-discount-editor-field">
+                      <input
+                        id="bill-discount-pct"
+                        autoFocus
+                        inputMode="decimal"
+                        type="text"
+                        className="bill-cart-discount-input"
+                        placeholder="0"
+                        value={discountInput}
+                        onChange={(e) =>
+                          setDiscountInput(
+                            e.target.value.replace(/[^\d.]/g, ""),
+                          )
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            applyDiscountPercent();
+                          }
+                          if (e.key === "Escape") setDiscountOpen(false);
+                        }}
+                        aria-label="Discount percent"
+                      />
+                      <span className="bill-cart-discount-suffix" aria-hidden>
+                        %
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="bill-cart-discount-ok"
+                      onClick={applyDiscountPercent}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="bill-cart-discount-cancel"
+                      onClick={() => setDiscountOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
+              </>
             );
           })()}
 
@@ -1657,7 +2196,13 @@ export function BillPage() {
             variant="primary"
             fullWidth
             size="lg"
-            disabled={!canPay || paying}
+            disabled={
+              !canPay ||
+              paying ||
+              cartCustomerOpen ||
+              newCustomerMode ||
+              newCustomerSaving
+            }
             loading={paying}
             onClick={handleCreateBill}
             className="bill-cart-create-btn"
@@ -1667,6 +2212,31 @@ export function BillPage() {
           </Button>
         </div>
       </Surface>
+          </>
+        );
+        return mobileCartOpen
+          ? createPortal(cartNode, document.body)
+          : cartNode;
+      })()}
+
+      {cart.length > 0 && !mobileCartOpen && !weightPick ? (
+        <div className="bill-mobile-cart-bar fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] z-50 lg:hidden">
+          <div className="flex h-[52px] items-center justify-between gap-3 bg-[#0d3d2a] px-4">
+            <p className="min-w-0 truncate text-sm font-semibold text-white">
+              {cart.length} {cart.length === 1 ? "item" : "items"} ·{" "}
+              {formatINR(total)}
+            </p>
+            <button
+              type="button"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#2f9e6a] px-4 text-sm font-bold text-white"
+              onClick={() => setMobileCartOpen(true)}
+            >
+              View cart
+              <ArrowRight className="size-4" strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
 
     <QuickAddDialog

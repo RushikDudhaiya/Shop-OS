@@ -29,13 +29,14 @@ import {
 } from "lucide-react";
 import { getShopCatalog, inferProductCategoryGroup } from "@shop-os/shared";
 import {
+  AppPageHeader,
   Button,
   EmptyState,
   PageLoader,
   Surface,
 } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
-import { api } from "@/lib/api";
+import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
 import { BulkAddPanel } from "./BulkAddPanel";
 import { AddProductDialog } from "./AddProductDialog";
@@ -67,12 +68,6 @@ const CATEGORY_DOT: Record<string, string> = {
   Hardware: "bg-slate-500",
   Others: "bg-ink-muted",
 };
-
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
-}
 
 function formatDashboardDate(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -234,7 +229,10 @@ function ProductCard({
             <MoreVertical className="size-3.5" />
           </button>
           {menuOpen ? (
-            <div className="absolute bottom-10 right-0 z-20 min-w-[148px] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-soft">
+            <div
+              className="absolute bottom-10 right-0 z-20 min-w-[148px] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-soft"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <button
                 type="button"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-paper-2"
@@ -344,12 +342,6 @@ function StockStatusDonut({
 export function ProductsPage() {
   const { activeShop } = useAuth();
   const shopId = activeShop?._id;
-  const roleLabel =
-    activeShop?.role === "OWNER"
-      ? "Owner"
-      : activeShop?.role
-        ? activeShop.role.charAt(0) + activeShop.role.slice(1).toLowerCase()
-        : "Team";
   const catalog = useMemo(
     () => getShopCatalog(activeShop?.businessType),
     [activeShop?.businessType],
@@ -377,18 +369,18 @@ export function ProductsPage() {
   const importRef = useRef<HTMLDivElement | null>(null);
   const now = useMemo(() => new Date(), []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!shopId) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     try {
       const data = await api<ProductListResponse>(
-        `/api/shops/${shopId}/products?q=${encodeURIComponent(q)}&pageSize=100&active=all`,
+        `/api/shops/${shopId}/products?q=${encodeURIComponent(q)}&pageSize=100`,
       );
       setItems(data.items);
       setTotal(data.total);
       setSuggestions(data.suggestions ?? []);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [shopId, q]);
 
@@ -547,14 +539,31 @@ export function ProductsPage() {
   }
 
   async function confirmDeleteProduct() {
-    if (!shopId || !deleteTarget) return;
+    if (!shopId || !deleteTarget || deleting) return;
+    const target = deleteTarget;
+    const targetId = target._id;
     setDeleting(true);
+    // Instant local remove — full list reload mat karo
+    setItems((prev) => prev.filter((p) => p._id !== targetId));
+    setTotal((t) => Math.max(0, t - 1));
+    setMenuId(null);
     try {
-      await api(`/api/shops/${shopId}/products/${deleteTarget._id}`, {
+      await api(`/api/shops/${shopId}/products/${targetId}`, {
         method: "DELETE",
       });
       setDeleteTarget(null);
-      await load();
+    } catch (err) {
+      // Rollback if API fails
+      setItems((prev) => {
+        if (prev.some((p) => p._id === targetId)) return prev;
+        return [...prev, target];
+      });
+      setTotal((t) => t + 1);
+      window.alert(
+        err instanceof ApiRequestError
+          ? err.body.message
+          : "Product delete nahi hua. Dobara try karein.",
+      );
     } finally {
       setDeleting(false);
     }
@@ -569,7 +578,6 @@ export function ProductsPage() {
 
   if (!shopId) return <PageLoader />;
 
-  const greeting = greetingForHour(now.getHours());
   const shopTip =
     catalog.quickItems[0]?.name && catalog.quickItems[1]?.name
       ? `Keep popular items like ${catalog.quickItems[0].name} and ${catalog.quickItems[1].name} always in stock — they sell fast!`
@@ -579,24 +587,16 @@ export function ProductsPage() {
     <div className="mx-auto w-full max-w-7xl pb-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1 space-y-5">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-gold" />
-                <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-                  {greeting}, {roleLabel}{" "}
-                  <span aria-hidden>👋</span>
-                </h1>
+          <AppPageHeader
+            title="Products"
+            subtitle="Manage your products, stock and pricing all in one place."
+            action={
+              <div className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft md:inline-flex">
+                <CalendarDays className="size-4 text-forest" />
+                {formatDashboardDate(now)}
               </div>
-              <p className="mt-1 text-sm text-ink-muted">
-                Manage your products, stock and pricing all in one place.
-              </p>
-            </div>
-            <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft">
-              <CalendarDays className="size-4 text-forest" />
-              {formatDashboardDate(now)}
-            </div>
-          </header>
+            }
+          />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -847,7 +847,7 @@ export function ProductsPage() {
             </div>
           ) : null}
 
-          {loading ? (
+          {loading && items.length === 0 ? (
             <PageLoader />
           ) : filtered.length === 0 ? (
             <EmptyState
@@ -1113,9 +1113,21 @@ export function ProductsPage() {
           setDialogOpen(false);
           setEditingProduct(null);
         }}
-        onCreated={() => void load()}
-        onUpdated={() => void load()}
-        onDeleted={() => void load()}
+        onCreated={(product) => {
+          setItems((prev) => [product, ...prev.filter((p) => p._id !== product._id)]);
+          setTotal((t) => t + 1);
+        }}
+        onUpdated={(product) => {
+          setItems((prev) =>
+            prev.map((p) => (p._id === product._id ? product : p)),
+          );
+        }}
+        onDeleted={(productId) => {
+          setItems((prev) => prev.filter((p) => p._id !== productId));
+          setTotal((t) => Math.max(0, t - 1));
+          setDialogOpen(false);
+          setEditingProduct(null);
+        }}
       />
 
       {deleteTarget ? (
@@ -1154,19 +1166,19 @@ export function ProductsPage() {
                 variant="secondary"
                 fullWidth
                 disabled={deleting}
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => !deleting && setDeleteTarget(null)}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                variant="primary"
+                variant="danger"
                 fullWidth
                 loading={deleting}
-                className="!bg-danger hover:!bg-danger/90"
+                disabled={deleting}
                 onClick={() => void confirmDeleteProduct()}
               >
-                Haan, delete
+                {deleting ? "Deleting..." : "Haan, delete"}
               </Button>
             </div>
           </div>

@@ -71,7 +71,7 @@ export function PaymentSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-ink/45 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={onClose}

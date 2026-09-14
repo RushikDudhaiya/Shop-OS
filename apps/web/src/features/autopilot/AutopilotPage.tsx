@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Bot,
   ChevronDown,
   Info,
   Sparkles,
   X,
 } from "lucide-react";
-import { PageLoader, Surface } from "@/components/ui";
+import { AppPageHeader, PageLoader, Surface } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
@@ -115,29 +114,20 @@ export function AutopilotPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 pb-6 sm:space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 sm:size-11">
-            <Bot className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="font-display text-xl font-semibold tracking-tight text-ink sm:text-2xl md:text-3xl">
-              Shop Autopilot
-            </h1>
-            <p className="mt-1 text-sm text-ink-muted">
-              Aapki dukaan ki roz ki samajh — data se action.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 text-sm font-medium text-ink-muted shadow-soft hover:bg-paper-2 sm:w-auto"
-          title="Autopilot uses your completed bills, stock, and customer data to suggest actions."
-        >
-          <Info className="size-4" />
-          Learn More
-        </button>
-      </header>
+      <AppPageHeader
+        title="Shop Autopilot"
+        subtitle="Aapki dukaan ki roz ki samajh — data se action."
+        action={
+          <button
+            type="button"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 text-sm font-medium text-ink-muted shadow-soft hover:bg-paper-2 sm:w-auto"
+            title="Autopilot uses your completed bills, stock, and customer data to suggest actions."
+          >
+            <Info className="size-4" />
+            Learn More
+          </button>
+        }
+      />
 
       <nav
         className="-mx-3 flex gap-1 overflow-x-auto border-b border-line/70 px-3 pb-px [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"

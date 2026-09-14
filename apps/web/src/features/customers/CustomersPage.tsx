@@ -21,6 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Button,
   DropdownMenu,
   EmptyState,
@@ -324,36 +325,32 @@ export function CustomersPage() {
 
   return (
     <div className="w-full space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-forest md:text-4xl">
-            Customers
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted md:text-base">
-            Walk-in default. Yahan udhaar wale.
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            leftIcon={<Upload className="size-4" />}
-            onClick={exportCsv}
-            disabled={!rows.length}
-          >
-            Export
-          </Button>
-          <Button
-            variant="primary"
-            leftIcon={<UserPlus className="size-4" />}
-            onClick={() => {
-              setAddOpen(true);
-              setError(null);
-            }}
-          >
-            Add Customer
-          </Button>
-        </div>
-      </header>
+      <AppPageHeader
+        title="Customers"
+        subtitle="Walk-in default. Yahan udhaar wale."
+        action={
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              leftIcon={<Upload className="size-4" />}
+              onClick={exportCsv}
+              disabled={!rows.length}
+            >
+              Export
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<UserPlus className="size-4" />}
+              onClick={() => {
+                setAddOpen(true);
+                setError(null);
+              }}
+            >
+              Add Customer
+            </Button>
+          </div>
+        }
+      />
 
       {loading && !summary ? (
         <PageLoader />

@@ -10,12 +10,17 @@ export function AppShell() {
 
   if (isBillPage) {
     return (
-      <div className="bill-app-grid">
-        <Sidebar />
-        <main className="bill-outlet-main">
-          <Outlet />
-        </main>
-      </div>
+      <>
+        <div className="bill-app-grid">
+          <Sidebar />
+          <main className="bill-outlet-main">
+            <SyncBanner />
+            <Outlet />
+          </main>
+        </div>
+        {/* Outside bill CSS — same footer component; show until desktop sidebar */}
+        <BottomNav className="!flex md:!flex lg:!hidden" />
+      </>
     );
   }
 

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
+/** Mock footer — identical on every mobile screen */
 const items: { to: string; label: string; icon: LucideIcon }[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/bill", label: "New Bill", icon: Receipt },
@@ -17,36 +18,48 @@ const items: { to: string; label: string; icon: LucideIcon }[] = [
   { to: "/more", label: "More", icon: MoreHorizontal },
 ];
 
-export function BottomNav() {
+export function BottomNav({ className }: { className?: string }) {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgb(20_32_27/0.06)] md:hidden"
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-50 border-t border-[#e8ecf0] bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_12px_rgb(20_32_27/0.04)] md:hidden",
+        className,
+      )}
       aria-label="Primary"
     >
-      <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1 py-1.5">
+      <ul className="mx-auto flex w-full max-w-lg items-stretch">
         {items.map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
               end={to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium",
-                  isActive ? "text-forest" : "text-ink-muted",
-                )
-              }
+              className="flex h-14 w-full flex-col items-center justify-center gap-0.5"
             >
               {({ isActive }) => (
                 <>
                   <span
                     className={cn(
-                      "flex size-9 items-center justify-center rounded-xl",
-                      isActive && "bg-forest/10",
+                      "flex size-9 shrink-0 items-center justify-center rounded-[10px] transition-colors",
+                      isActive
+                        ? "bg-[#e7f3ec] text-[#0d3d2a]"
+                        : "bg-transparent text-[#6b7280]",
                     )}
                   >
-                    <Icon className="size-5" strokeWidth={isActive ? 2.4 : 2} />
+                    <Icon
+                      className="size-5"
+                      strokeWidth={isActive ? 2.25 : 1.85}
+                    />
                   </span>
-                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      "whitespace-nowrap text-center text-[10px] leading-none",
+                      isActive
+                        ? "font-semibold text-[#0d3d2a]"
+                        : "font-medium text-[#6b7280]",
+                    )}
+                  >
+                    {label}
+                  </span>
                 </>
               )}
             </NavLink>

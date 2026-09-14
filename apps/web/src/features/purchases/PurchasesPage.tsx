@@ -5,10 +5,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft,
-  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -22,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Badge,
   Button,
   EmptyState,
@@ -90,12 +89,6 @@ const SUPPLIER_COLORS = [
   "bg-rose-100 text-rose-800",
   "bg-indigo-100 text-indigo-800",
 ];
-
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 function formatDashboardDate(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -172,23 +165,12 @@ function statusPillClass(status: string) {
   return "bg-paper-2 text-ink-muted";
 }
 
-function profileInitials(name: string) {
-  return supplierInitials(name || "SO");
-}
-
 const selectClass =
   "h-11 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink focus:border-forest";
 
 export function PurchasesPage() {
-  const { activeShop, user } = useAuth();
-  const navigate = useNavigate();
+  const { activeShop } = useAuth();
   const shopId = activeShop?._id;
-  const roleLabel =
-    activeShop?.role === "OWNER"
-      ? "Owner"
-      : activeShop?.role
-        ? activeShop.role.charAt(0) + activeShop.role.slice(1).toLowerCase()
-        : "Team";
   const now = useMemo(() => new Date(), []);
   const [searchParams] = useSearchParams();
   const queryProductId = searchParams.get("productId")?.trim() || "";
@@ -521,8 +503,6 @@ export function PurchasesPage() {
 
   if (!shopId) return <PageLoader />;
 
-  const greeting = greetingForHour(now.getHours());
-  const avatar = profileInitials(user?.name || activeShop?.name || "SO");
   const supplierPhone = (name: string | null) =>
     suppliers.find((s) => s.name === name)?.phone ?? null;
 
@@ -530,56 +510,16 @@ export function PurchasesPage() {
     <div className="mx-auto w-full max-w-7xl pb-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1 space-y-4 sm:space-y-5">
-          {/* Mobile header — mock */}
-          <header className="md:hidden">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                className="inline-flex size-10 items-center justify-center rounded-full border border-line bg-white text-ink shadow-soft"
-                onClick={() => navigate(-1)}
-                aria-label="Back"
-              >
-                <ArrowLeft className="size-4" />
-              </button>
-              <h1 className="text-lg font-bold text-ink">Purchases</h1>
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/more"
-                  className="relative inline-flex size-10 items-center justify-center rounded-full border border-line bg-white text-ink-muted shadow-soft"
-                  aria-label="Notifications"
-                >
-                  <Bell className="size-4" />
-                  <span className="absolute right-2 top-2 size-2 rounded-full bg-danger" />
-                </Link>
-                <Link
-                  to="/more"
-                  className="inline-flex size-10 items-center justify-center rounded-full bg-[#1a1c2e] text-xs font-bold text-white"
-                >
-                  {avatar}
-                </Link>
+          <AppPageHeader
+            title="Purchases"
+            subtitle="Suppliers se orders banayein aur receive karein ✌️"
+            action={
+              <div className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft md:inline-flex">
+                <CalendarDays className="size-4 text-forest" />
+                {formatDashboardDate(now)}
               </div>
-            </div>
-            <p className="mt-3 text-sm text-ink-muted">
-              Suppliers se orders banayein aur receive karein 👋
-            </p>
-          </header>
-
-          {/* Desktop header */}
-          <header className="hidden flex-col gap-3 sm:flex-row sm:items-start sm:justify-between md:flex">
-            <div className="min-w-0">
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-                {greeting}, {roleLabel}{" "}
-                <span aria-hidden>👋</span>
-              </h1>
-              <p className="mt-1 text-sm text-ink-muted">
-                Suppliers se stock order karein aur track karein.
-              </p>
-            </div>
-            <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm text-ink shadow-soft">
-              <CalendarDays className="size-4 text-forest" />
-              {formatDashboardDate(now)}
-            </div>
-          </header>
+            }
+          />
 
           <div className="hidden flex-wrap items-start justify-between gap-3 md:flex">
             <div className="flex min-w-0 items-start gap-2.5">
@@ -588,7 +528,7 @@ export function PurchasesPage() {
               </span>
               <div>
                 <h2 className="font-display text-xl font-semibold text-ink sm:text-2xl">
-                  Purchases
+                  Purchase orders
                 </h2>
                 <p className="text-sm text-ink-muted">
                   Suppliers se orders banayein aur stock receive karein.

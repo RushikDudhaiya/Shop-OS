@@ -20,6 +20,7 @@ import {
   Wallet,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Button,
   EmptyState,
   Input,
@@ -368,24 +369,20 @@ export function ExpensesPage() {
 
   return (
     <div className="w-full space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl md:text-4xl">
-            Kharcha (Expenses)
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted md:text-base">
-            Apne saare kharche yahan record karein aur track karein.
-          </p>
-        </div>
-        <Button
-          variant="gold"
-          className="w-full sm:w-auto"
-          leftIcon={<Plus className="size-4" />}
-          onClick={() => setOpen(true)}
-        >
-          Naya Kharcha
-        </Button>
-      </header>
+      <AppPageHeader
+        title="Kharcha"
+        subtitle="Apne saare kharche yahan record karein aur track karein."
+        action={
+          <Button
+            variant="gold"
+            className="w-full sm:w-auto"
+            leftIcon={<Plus className="size-4" />}
+            onClick={() => setOpen(true)}
+          >
+            Naya Kharcha
+          </Button>
+        }
+      />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
         <label className="flex w-full flex-col gap-2 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink shadow-soft sm:inline-flex sm:h-11 sm:w-auto sm:flex-row sm:items-center sm:gap-2 sm:py-0">

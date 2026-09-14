@@ -40,6 +40,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Badge,
   Button,
   EmptyState,
@@ -423,14 +424,10 @@ export function MorePage() {
 
   return (
     <div className="w-full space-y-5">
-      <header>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl md:text-4xl">
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-ink-muted md:text-base">
-          Apne shop aur account ki settings yahan manage karein.
-        </p>
-      </header>
+      <AppPageHeader
+        title="Settings"
+        subtitle="Apne shop aur account ki settings yahan manage karein."
+      />
 
       <section className="grid grid-cols-2 gap-2 md:hidden">
         <MobileShortcut to="/autopilot" label="Shop Autopilot" icon={Bot} />

@@ -18,13 +18,13 @@ import {
   Search,
   ShoppingBag,
   ShoppingCart,
-  Sun,
   TrendingUp,
   Truck,
   Users,
   Wallet,
 } from "lucide-react";
 import {
+  AppPageHeader,
   Button,
   EmptyState,
   PageLoader,
@@ -212,12 +212,6 @@ function formatBillDateTime(iso: string | null) {
   }).format(new Date(iso));
 }
 
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
-}
-
 function changeLabel(pct: number | null) {
   if (pct === null) return "No prior week data";
   if (pct === 0) return "Same as last week";
@@ -275,12 +269,6 @@ export function ReportsPage() {
   const { activeShop } = useAuth();
   const shopId = activeShop?._id;
   const navigate = useNavigate();
-  const roleLabel =
-    activeShop?.role === "OWNER"
-      ? "Owner"
-      : activeShop?.role
-        ? activeShop.role.charAt(0) + activeShop.role.slice(1).toLowerCase()
-        : "Team";
 
   const now = useMemo(() => new Date(), []);
   const [from, setFrom] = useState(() =>
@@ -423,7 +411,6 @@ export function ReportsPage() {
 
   if (!shopId) return <PageLoader />;
 
-  const greeting = greetingForHour(now.getHours());
   const maxDailySales = Math.max(
     1,
     ...(analytics?.daily.map((d) => d.salesTotal) ?? [1]),
@@ -431,57 +418,48 @@ export function ReportsPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 pb-4">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Sun className="size-5 text-gold" />
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-              {greeting}, {roleLabel}{" "}
-              <span aria-hidden>👋</span>
-            </h1>
+      <AppPageHeader
+        title="Reports"
+        subtitle="Here's how your shop performed in this period."
+        action={
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
+            <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+              <span className="hidden text-xs font-medium text-ink-muted sm:block">
+                {formatRangeLabel(from, to)}
+              </span>
+              <label className="flex w-full flex-col gap-2 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink shadow-soft sm:inline-flex sm:h-11 sm:w-auto sm:flex-row sm:items-center sm:gap-2 sm:py-0">
+                <CalendarDays className="size-4 shrink-0 text-forest" />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none sm:w-[9.5rem] sm:flex-none"
+                    value={from}
+                    max={to}
+                    onChange={(e) => setFrom(e.target.value)}
+                  />
+                  <span className="text-ink-muted">-</span>
+                  <input
+                    type="date"
+                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none sm:w-[9.5rem] sm:flex-none"
+                    value={to}
+                    min={from}
+                    onChange={(e) => setTo(e.target.value)}
+                  />
+                </div>
+              </label>
+            </div>
+            <Button
+              variant="primary"
+              className="w-full sm:w-auto"
+              leftIcon={<Download className="size-4" />}
+              onClick={exportCsv}
+              disabled={!analytics}
+            >
+              Export Report
+            </Button>
           </div>
-          <p className="mt-1 text-sm text-ink-muted">
-            Here&apos;s how your shop performed in this period.
-          </p>
-        </div>
-
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
-          <div className="flex w-full flex-col gap-1.5 sm:w-auto">
-            <span className="hidden text-xs font-medium text-ink-muted sm:block">
-              {formatRangeLabel(from, to)}
-            </span>
-            <label className="flex w-full flex-col gap-2 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink shadow-soft sm:inline-flex sm:h-11 sm:w-auto sm:flex-row sm:items-center sm:gap-2 sm:py-0">
-              <CalendarDays className="size-4 shrink-0 text-forest" />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <input
-                  type="date"
-                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none sm:w-[9.5rem] sm:flex-none"
-                  value={from}
-                  max={to}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-                <span className="text-ink-muted">-</span>
-                <input
-                  type="date"
-                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none sm:w-[9.5rem] sm:flex-none"
-                  value={to}
-                  min={from}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </div>
-            </label>
-          </div>
-          <Button
-            variant="primary"
-            className="w-full sm:w-auto"
-            leftIcon={<Download className="size-4" />}
-            onClick={exportCsv}
-            disabled={!analytics}
-          >
-            Export Report
-          </Button>
-        </div>
-      </header>
+        }
+      />
 
       <div>
         <h2 className="font-display text-xl font-semibold text-ink sm:text-2xl md:text-3xl">

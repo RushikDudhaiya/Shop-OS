@@ -900,19 +900,19 @@ export function AddProductDialog({
                 variant="secondary"
                 fullWidth
                 disabled={deleting}
-                onClick={() => setConfirmDelete(false)}
+                onClick={() => !deleting && setConfirmDelete(false)}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                variant="primary"
+                variant="danger"
                 fullWidth
                 loading={deleting}
-                className="!bg-danger hover:!bg-danger/90"
+                disabled={deleting}
                 onClick={() => void onDeleteConfirm()}
               >
-                Haan, delete
+                {deleting ? "Deleting..." : "Haan, delete"}
               </Button>
             </div>
           </div>
