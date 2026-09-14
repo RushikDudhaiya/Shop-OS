@@ -616,15 +616,15 @@ export function ProductsPage() {
             </Button>
           </div>
 
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Surface className="space-y-2 p-4">
+          <section className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+            <Surface className="space-y-1.5 !p-3 sm:space-y-2 sm:!p-4">
               <div className="flex items-center gap-2">
-                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                  <Package className="size-4" />
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 sm:size-9">
+                  <Package className="size-3.5 sm:size-4" />
                 </span>
-                <p className="text-sm text-ink-muted">Total Products</p>
+                <p className="text-xs text-ink-muted sm:text-sm">Total Products</p>
               </div>
-              <p className="font-display text-3xl font-semibold text-ink">
+              <p className="text-xl font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                 {stats.total}
               </p>
               <p className="text-xs font-semibold text-success">
@@ -632,14 +632,14 @@ export function ProductsPage() {
               </p>
             </Surface>
 
-            <Surface className="space-y-2 p-4">
+            <Surface className="space-y-1.5 !p-3 sm:space-y-2 sm:!p-4">
               <div className="flex items-center gap-2">
-                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                  <AlertTriangle className="size-4" />
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 sm:size-9">
+                  <AlertTriangle className="size-3.5 sm:size-4" />
                 </span>
-                <p className="text-sm text-ink-muted">Low Stock</p>
+                <p className="text-xs text-ink-muted sm:text-sm">Low Stock</p>
               </div>
-              <p className="font-display text-3xl font-semibold text-ink">
+              <p className="text-xl font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                 {stats.low}
               </p>
               <button
@@ -654,14 +654,14 @@ export function ProductsPage() {
               </button>
             </Surface>
 
-            <Surface className="space-y-2 p-4">
+            <Surface className="space-y-1.5 !p-3 sm:space-y-2 sm:!p-4">
               <div className="flex items-center gap-2">
-                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-red-50 text-red-700">
-                  <Tag className="size-4" />
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700 sm:size-9">
+                  <Tag className="size-3.5 sm:size-4" />
                 </span>
-                <p className="text-sm text-ink-muted">Out of Stock</p>
+                <p className="text-xs text-ink-muted sm:text-sm">Out of Stock</p>
               </div>
-              <p className="font-display text-3xl font-semibold text-ink">
+              <p className="text-xl font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                 {stats.out}
               </p>
               <button
@@ -676,14 +676,16 @@ export function ProductsPage() {
               </button>
             </Surface>
 
-            <Surface className="space-y-2 p-4">
+            <Surface className="space-y-1.5 !p-3 sm:space-y-2 sm:!p-4">
               <div className="flex items-center gap-2">
-                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                  <ShoppingCart className="size-4" />
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 sm:size-9">
+                  <ShoppingCart className="size-3.5 sm:size-4" />
                 </span>
-                <p className="text-sm text-ink-muted">Total Stock Value</p>
+                <p className="min-w-0 text-xs text-ink-muted sm:text-sm">
+                  Total Stock Value
+                </p>
               </div>
-              <p className="font-display text-3xl font-semibold text-ink">
+              <p className="truncate text-xl font-bold text-ink sm:font-display sm:text-3xl sm:font-semibold">
                 {formatINR(stats.stockValue)}
               </p>
               <button
