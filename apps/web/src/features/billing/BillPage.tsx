@@ -1578,7 +1578,7 @@ export function BillPage() {
             <Surface
               padded={false}
               className={cn(
-                "bill-cart !flex !min-h-0 !flex-col !rounded-[14px] border-line",
+                "bill-cart !flex !min-h-0 !flex-col !rounded-[14px] !border-line !bg-white",
                 mobileCartOpen ? "bill-cart--sheet" : "max-lg:!hidden",
               )}
               style={
@@ -1598,6 +1598,7 @@ export function BillPage() {
                       margin: 0,
                       borderRadius: "1.5rem 1.5rem 0 0",
                       alignSelf: "auto",
+                      backgroundColor: "#fff",
                     }
                   : undefined
               }
@@ -1928,19 +1929,19 @@ export function BillPage() {
                             </div>
                           )}
                         </div>
-                        <div className="bill-cart-line-prices">
+                        <div className="bill-cart-line-actions">
                           <p className="bill-cart-line-total">
                             {formatINR(lineTotal)}
                           </p>
+                          <button
+                            type="button"
+                            className="bill-cart-line-remove"
+                            aria-label="Remove"
+                            onClick={() => removeLine(line.productId)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-danger/30 text-danger hover:bg-danger-soft"
-                          aria-label="Remove"
-                          onClick={() => removeLine(line.productId)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
                       </div>
                     </li>
                   );

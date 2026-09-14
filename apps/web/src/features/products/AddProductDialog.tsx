@@ -397,14 +397,14 @@ export function AddProductDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-ink/45 px-0 pt-14 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:z-[80] md:items-center md:p-4 md:pt-4 md:pb-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       onClick={onClose}
     >
       <form
-        className="flex max-h-[96dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-soft sm:rounded-3xl"
+        className="flex max-h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-soft md:max-h-[96dvh] md:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => void onSubmit(e)}
       >
@@ -843,7 +843,7 @@ export function AddProductDialog({
           ) : null}
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line/70 px-4 py-4 sm:px-6">
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line/70 bg-white px-4 py-3 sm:px-6 sm:py-4">
           <div>
             {editing ? (
               <Button
