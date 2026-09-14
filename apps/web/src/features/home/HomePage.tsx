@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
-  CalendarDays,
+  Bell,
+  Bot,
+  Box,
   ChevronRight,
   FileText,
+  IndianRupee,
+  ListChecks,
+  Package,
+  PackagePlus,
   Plus,
-  TrendingUp,
+  Receipt,
+  Store,
   Users,
-  Wallet,
 } from "lucide-react";
-import { PageLoader, Surface } from "@/components/ui";
-import { ShopAutopilotSection } from "@/features/autopilot/ShopAutopilotSection";
+import { APP_NAME } from "@shop-os/shared";
+import { PageLoader } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
@@ -22,37 +27,24 @@ type RecentBill = {
   customerName: string | null;
   total: number;
   completedAt: string | null;
+  itemCount?: number;
+  paymentMethod?: string | null;
 };
 
 type Summary = {
   todaySalesTotal: number;
   todaySalesCount: number;
-  monthSalesTotal: number;
-  lastMonthSalesTotal: number;
-  monthSalesGrowthPct: number | null;
-  udhaarOutstanding: number;
-  udhaarCustomerCount: number;
+  todaySalesGrowthPct: number | null;
+  todayBillsGrowthPct: number | null;
   lowStockCount: number;
-  expensesTotal: number;
-  todayExpensesTotal: number;
-  yesterdayExpensesTotal: number;
-  expensesDeltaVsYesterday: number;
+  totalProductsCount: number;
   recentBills: RecentBill[];
 };
 
 function greetingForHour(hour: number) {
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-function formatDashboardDate(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    weekday: "short",
-  }).format(date);
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
 }
 
 function formatBillTime(iso: string | null) {
@@ -64,25 +56,111 @@ function formatBillTime(iso: string | null) {
   }).format(new Date(iso));
 }
 
-function expenseDeltaLabel(delta: number) {
-  if (delta === 0) return "Same as yesterday";
-  if (delta > 0) return `${formatINR(delta)} more than yesterday`;
-  return `${formatINR(Math.abs(delta))} less than yesterday`;
+function growthVsYesterday(pct: number | null) {
+  if (pct === null) return { text: "vs yesterday", up: true as boolean | null };
+  if (pct === 0) return { text: "Same as yesterday", up: null };
+  const arrow = pct > 0 ? "↑" : "↓";
+  return {
+    text: `${arrow} ${Math.abs(Math.round(pct))}% vs yesterday`,
+    up: pct > 0,
+  };
 }
 
-function growthLabel(pct: number | null) {
-  if (pct === null) return "No prior month data";
-  if (pct === 0) return "Same as last month";
-  const sign = pct > 0 ? "+" : "-";
-  return `${sign} ${Math.abs(pct)}% vs last month`;
+function paymentTone(method: string | null | undefined) {
+  const m = (method || "").toUpperCase();
+  if (m === "UPI") {
+    return { label: "UPI", className: "bg-emerald-50 text-emerald-700" };
+  }
+  if (m === "CASH") {
+    return { label: "Cash", className: "bg-sky-50 text-sky-700" };
+  }
+  if (m === "CARD" || m === "ONLINE" || m === "BANK") {
+    return { label: "Online", className: "bg-violet-50 text-violet-700" };
+  }
+  if (m === "CREDIT") {
+    return { label: "Udhaar", className: "bg-amber-50 text-amber-800" };
+  }
+  return { label: method || "Paid", className: "bg-paper-2 text-ink-muted" };
 }
 
-function customerCountLabel(count: number) {
-  return count === 1 ? "1 customer" : `${count} customers`;
+function billIconTone(method: string | null | undefined) {
+  const m = (method || "").toUpperCase();
+  if (m === "UPI") return "bg-emerald-50 text-emerald-700";
+  if (m === "CASH") return "bg-sky-50 text-sky-700";
+  if (m === "CARD" || m === "ONLINE" || m === "BANK") {
+    return "bg-violet-50 text-violet-700";
+  }
+  return "bg-forest/10 text-forest";
 }
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "SO";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+}
+
+function ShopHeroArt() {
+  return (
+    <svg
+      viewBox="0 0 140 110"
+      className="h-[88px] w-[112px] shrink-0 sm:h-[100px] sm:w-[128px]"
+      aria-hidden
+    >
+      <circle cx="108" cy="22" r="14" fill="#F6D978" opacity="0.9" />
+      <path
+        d="M18 78c10-22 28-34 48-38 8 14 6 28-2 40-16 4-32 4-46-2Z"
+        fill="#9FD0B8"
+        opacity="0.55"
+      />
+      <path
+        d="M92 86c8-16 22-24 38-26-2 12-8 22-18 28-8 2-14 2-20-2Z"
+        fill="#9FD0B8"
+        opacity="0.45"
+      />
+      <rect x="34" y="42" width="72" height="48" rx="8" fill="#0F3D2E" />
+      <path d="M28 48 L70 22 L112 48 Z" fill="#2F8F6B" />
+      <rect x="58" y="58" width="24" height="32" rx="3" fill="#E6F4EE" />
+      <rect x="42" y="58" width="12" height="12" rx="2" fill="#7EC8E3" />
+      <rect x="86" y="58" width="12" height="12" rx="2" fill="#F0B070" />
+      <rect x="20" y="88" width="100" height="6" rx="3" fill="#1B3022" />
+    </svg>
+  );
+}
+
+const QUICK_ACTIONS = [
+  {
+    to: "/bill",
+    title: "New Bill",
+    sub: "Create a new bill",
+    icon: Plus,
+    tone: "bg-emerald-50 text-emerald-700",
+  },
+  {
+    to: "/products",
+    title: "Add Product",
+    sub: "Add new item",
+    icon: PackagePlus,
+    tone: "bg-sky-50 text-sky-700",
+  },
+  {
+    to: "/inventory",
+    title: "Inventory",
+    sub: "Check stock",
+    icon: ListChecks,
+    tone: "bg-violet-50 text-violet-700",
+  },
+  {
+    to: "/customers",
+    title: "Customers",
+    sub: "View customers",
+    icon: Users,
+    tone: "bg-orange-50 text-orange-700",
+  },
+] as const;
 
 export function HomePage() {
-  const { activeShop } = useAuth();
+  const { activeShop, user } = useAuth();
   const shopId = activeShop?._id;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,206 +192,299 @@ export function HomePage() {
     () => greetingForHour(now.getHours()),
     [now],
   );
-  const dateLabel = useMemo(() => formatDashboardDate(now), [now]);
   const shopName = activeShop?.name ?? "Your shop";
+  const avatarLabel = initials(user?.name || shopName);
   const bills = summary?.recentBills ?? [];
-  const lowStock = summary?.lowStockCount ?? 0;
-  const growthPct = summary?.monthSalesGrowthPct ?? null;
+  const salesGrowth = growthVsYesterday(summary?.todaySalesGrowthPct ?? null);
+  const billsGrowth = growthVsYesterday(summary?.todayBillsGrowthPct ?? null);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl font-semibold tracking-tight break-words text-ink sm:text-3xl md:text-4xl">
-            {greeting}, {shopName}{" "}
-            <span aria-hidden="true">👋</span>
-          </h1>
-          <p className="mt-1.5 text-sm text-ink-muted md:text-base">
-            Aaj ka din shandar banate hain!
-          </p>
+    <div className="mx-auto w-full max-w-6xl space-y-4 pb-2 sm:space-y-5 lg:max-w-none">
+      {/* Top brand bar — mock header */}
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-forest text-white shadow-soft">
+            <Store className="size-[18px]" strokeWidth={2.25} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-base font-bold leading-none text-forest">
+              {APP_NAME}
+            </p>
+            <p className="mt-1 truncate text-[11px] font-medium text-ink-muted">
+              Smart Shop Management
+            </p>
+          </div>
         </div>
-        <div className="inline-flex w-fit shrink-0 items-center gap-2 rounded-2xl border border-line/80 bg-white px-3 py-2 shadow-soft sm:px-3.5 sm:py-2.5">
-          <CalendarDays className="size-4 text-forest" />
-          <span className="text-xs font-medium text-ink sm:text-sm">{dateLabel}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/more"
+            className="relative inline-flex size-10 items-center justify-center rounded-full border border-line/70 bg-white text-ink-muted shadow-soft"
+            aria-label="Notifications"
+          >
+            <Bell className="size-4" />
+            <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-4 text-white">
+              3
+            </span>
+          </Link>
+          <Link
+            to="/more"
+            className="inline-flex size-10 items-center justify-center rounded-full bg-forest text-xs font-bold text-white shadow-soft"
+            aria-label="Profile"
+          >
+            {avatarLabel}
+          </Link>
         </div>
       </header>
+
+      {/* Greeting hero */}
+      <section className="overflow-hidden rounded-[22px] border border-[#d7ebe1] bg-[#E6F4EE] px-4 py-4 sm:px-5 sm:py-5">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[1.35rem] font-bold leading-tight tracking-tight text-ink sm:text-2xl">
+              {greeting}, {shopName}{" "}
+              <span aria-hidden>👋</span>
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              Manage your shop, track sales, and grow your business — all in one
+              place.
+            </p>
+          </div>
+          <ShopHeroArt />
+        </div>
+      </section>
 
       {loading ? (
         <PageLoader />
       ) : (
         <>
-          <Surface className="space-y-5 p-4 sm:p-5 md:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-muted">
-                  Aaj ki bikri
-                </p>
-                <p className="mt-2 font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl md:text-5xl">
-                  {formatINR(summary?.todaySalesTotal ?? 0)}
-                </p>
-                <p className="mt-1.5 text-sm text-ink-muted">
-                  {summary?.todaySalesCount ?? 0} sales
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-semibold text-success">
-                <span className="size-1.5 rounded-full bg-success" />
-                Live
-              </span>
-            </div>
-
-            <Link
-              to="/bill"
-              className={cn(
-                "inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl sm:h-14",
-                "bg-gold text-base font-semibold text-ink shadow-soft transition-colors hover:bg-gold-2",
-              )}
-            >
-              <Plus className="size-5" />
-              Naya Bill
-            </Link>
-          </Surface>
-
-          {shopId ? <ShopAutopilotSection shopId={shopId} /> : null}
-
-          <section className="space-y-3">
-            <h2 className="text-base font-semibold text-ink">Quick Overview</h2>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                icon={TrendingUp}
-                iconClass="bg-success-soft text-success"
-                label="Is mahine ki bikri"
-                value={formatINR(summary?.monthSalesTotal ?? 0)}
-                footer={growthLabel(growthPct)}
-                footerClass={
-                  growthPct === null
-                    ? "text-ink-muted"
-                    : growthPct >= 0
-                      ? "text-success"
-                      : "text-danger"
-                }
-              />
-              <Link to="/customers" className="block">
-                <StatCard
-                  icon={Users}
-                  iconClass="bg-sky-100 text-sky-700"
-                  label="Udhaar baaki"
-                  value={formatINR(summary?.udhaarOutstanding ?? 0)}
-                  footer={customerCountLabel(summary?.udhaarCustomerCount ?? 0)}
-                  footerClass="text-sky-700"
-                />
-              </Link>
-              <Link to="/inventory" className="block">
-                <StatCard
-                  icon={AlertTriangle}
-                  iconClass="bg-orange-100 text-orange-700"
-                  label="Low stock"
-                  value={`${lowStock} items`}
-                  footer={lowStock > 0 ? "Restock needed" : "Stock theek hai"}
-                  footerClass={lowStock > 0 ? "text-danger" : "text-orange-700"}
-                />
-              </Link>
-              <Link to="/expenses" className="block">
-                <StatCard
-                  icon={Wallet}
-                  iconClass="bg-violet-100 text-violet-700"
-                  label="Kharcha"
-                  value={formatINR(summary?.expensesTotal ?? 0)}
-                  footer={expenseDeltaLabel(
-                    summary?.expensesDeltaVsYesterday ?? 0,
+          {/* Quick actions — 2×2 mobile · 4 across desktop */}
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {QUICK_ACTIONS.map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="rounded-2xl border border-line/70 bg-white p-3.5 shadow-soft transition-colors hover:bg-paper-2/40"
+              >
+                <span
+                  className={cn(
+                    "mb-3 inline-flex size-9 items-center justify-center rounded-xl",
+                    action.tone,
                   )}
-                  footerClass="text-violet-700"
-                />
+                >
+                  <action.icon className="size-4" strokeWidth={2.25} />
+                </span>
+                <p className="text-sm font-semibold text-ink">{action.title}</p>
+                <p className="mt-0.5 text-[11px] text-ink-muted">{action.sub}</p>
               </Link>
-            </div>
+            ))}
           </section>
 
-          <Surface padded={false} className="overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b border-line/70 px-5 py-4">
-              <h2 className="text-base font-semibold text-ink">Recent Bills</h2>
+          {/* Metrics — 2×2 mobile · 4 across desktop */}
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard
+              icon={IndianRupee}
+              tone="bg-emerald-50 text-emerald-700"
+              label="Today's Sales"
+              value={formatINR(summary?.todaySalesTotal ?? 0)}
+              footer={salesGrowth.text}
+              footerClass={
+                salesGrowth.up === null
+                  ? "text-ink-muted"
+                  : salesGrowth.up
+                    ? "text-success"
+                    : "text-danger"
+              }
+            />
+            <MetricCard
+              icon={Receipt}
+              tone="bg-sky-50 text-sky-700"
+              label="Total Bills"
+              value={String(summary?.todaySalesCount ?? 0)}
+              footer={billsGrowth.text}
+              footerClass={
+                billsGrowth.up === null
+                  ? "text-ink-muted"
+                  : billsGrowth.up
+                    ? "text-success"
+                    : "text-danger"
+              }
+            />
+            <MetricCard
+              icon={Box}
+              tone="bg-violet-50 text-violet-700"
+              label="Low Stock"
+              value={String(summary?.lowStockCount ?? 0)}
+              footer="View →"
+              footerClass="text-violet-700"
+              to="/inventory"
+            />
+            <MetricCard
+              icon={Package}
+              tone="bg-orange-50 text-orange-700"
+              label="Total Products"
+              value={String(summary?.totalProductsCount ?? 0)}
+              footer="View →"
+              footerClass="text-orange-700"
+              to="/products"
+            />
+          </section>
+
+          {/* Recent Bills */}
+          <section className="overflow-hidden rounded-2xl border border-line/70 bg-white shadow-soft">
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex size-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <FileText className="size-4" />
+                </span>
+                <h2 className="text-base font-semibold text-ink">Recent Bills</h2>
+              </div>
               <Link
                 to="/reports"
                 className="text-sm font-medium text-forest hover:underline"
               >
-                Sabhi Bills →
+                View All →
               </Link>
             </div>
 
             {bills.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-ink-muted">
+              <p className="px-4 pb-5 text-sm text-ink-muted">
                 Abhi koi bill nahi — pehla bill banao.
               </p>
             ) : (
-              <ul className="divide-y divide-line/70">
-                {bills.map((bill) => (
-                  <li key={bill._id}>
-                    <Link
-                      to={`/invoice/${bill._id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-paper-2/50"
-                    >
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-forest/10 text-forest">
-                        <FileText className="size-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-ink">
-                          Bill #{bill.invoiceNumber}
-                        </p>
-                        <p className="truncate text-xs text-ink-muted">
-                          {bill.customerName || "Walk-in Customer"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-ink">
-                          {formatINR(bill.total)}
-                        </p>
-                        <p className="text-xs text-ink-muted">
-                          {formatBillTime(bill.completedAt)}
-                        </p>
-                      </div>
-                      <ChevronRight className="size-4 shrink-0 text-ink-muted" />
-                    </Link>
-                  </li>
-                ))}
+              <ul className="divide-y divide-line/60 border-t border-line/60">
+                {bills.map((bill) => {
+                  const pay = paymentTone(bill.paymentMethod);
+                  const items = bill.itemCount ?? 0;
+                  return (
+                    <li key={bill._id}>
+                      <Link
+                        to={`/invoice/${bill._id}`}
+                        className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-paper-2/40"
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
+                            billIconTone(bill.paymentMethod),
+                          )}
+                        >
+                          <Receipt className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-ink">
+                            #{bill.invoiceNumber}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-ink-muted">
+                            {items} item{items === 1 ? "" : "s"} •{" "}
+                            {formatBillTime(bill.completedAt)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              pay.className,
+                            )}
+                          >
+                            {pay.label}
+                          </span>
+                          <p className="text-sm font-semibold text-ink">
+                            {formatINR(bill.total)}
+                          </p>
+                          <ChevronRight className="size-4 text-ink-muted" />
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             )}
-          </Surface>
+          </section>
+
+          {/* Shop Autopilot promo — mock card */}
+          <section className="rounded-2xl border border-[#b8dcc9] bg-[#E6F4EE] p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white text-forest shadow-soft">
+                <Bot className="size-6" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-ink">Shop Autopilot</h2>
+                  <span className="rounded-full bg-forest px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    New
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1 text-sm text-ink-muted">
+                  <li>• Auto reorder suggestions</li>
+                  <li>• Low stock alerts</li>
+                  <li>• Smart sales insights</li>
+                </ul>
+                <div className="mt-3 flex justify-end">
+                  <Link
+                    to="/autopilot"
+                    className="inline-flex h-9 items-center gap-1 rounded-xl bg-forest px-3.5 text-sm font-semibold text-white"
+                  >
+                    Open
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
         </>
       )}
     </div>
   );
 }
 
-function StatCard({
+function MetricCard({
   icon: Icon,
-  iconClass,
+  tone,
   label,
   value,
   footer,
   footerClass,
+  to,
 }: {
-  icon: typeof TrendingUp;
-  iconClass: string;
+  icon: typeof IndianRupee;
+  tone: string;
   label: string;
   value: string;
   footer: string;
   footerClass?: string;
+  to?: string;
 }) {
-  return (
-    <Surface className="h-full space-y-3 transition-colors hover:bg-paper-2/30">
+  const body = (
+    <>
       <span
         className={cn(
-          "inline-flex size-9 items-center justify-center rounded-xl",
-          iconClass,
+          "mb-3 inline-flex size-9 items-center justify-center rounded-xl",
+          tone,
         )}
       >
-        <Icon className="size-4" />
+        <Icon className="size-4" strokeWidth={2.25} />
       </span>
-      <div>
-        <p className="text-sm text-ink-muted">{label}</p>
-        <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink">
-          {value}
-        </p>
-      </div>
-      <p className={cn("text-xs font-medium", footerClass)}>{footer}</p>
-    </Surface>
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
+      <p className="mt-1 text-xl font-bold tracking-tight text-ink sm:text-2xl">
+        {value}
+      </p>
+      <p className={cn("mt-2 text-xs font-semibold", footerClass)}>{footer}</p>
+    </>
+  );
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="block rounded-2xl border border-line/70 bg-white p-3.5 text-left shadow-soft transition-colors hover:bg-paper-2/40"
+      >
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-line/70 bg-white p-3.5 text-left shadow-soft">
+      {body}
+    </div>
   );
 }

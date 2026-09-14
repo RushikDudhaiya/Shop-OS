@@ -63,7 +63,7 @@ function unitLabel(unit?: string | null) {
   const u = (unit || "piece").trim().toLowerCase();
   if (u === "kg" || u === "g" || u === "gm") return u === "gm" ? "g" : u;
   if (u === "l" || u === "lt" || u === "ltr" || u === "ml") return u;
-  if (u === "piece" || u === "pcs" || u === "pc") return "pack";
+  if (u === "piece" || u === "pcs" || u === "pc") return "piece";
   if (u === "packet" || u === "pkt" || u === "pack" || u === "bag") return "pack";
   return u;
 }

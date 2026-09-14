@@ -62,6 +62,7 @@ reportsRouter.get(
 
       const [
         todayAgg,
+        yesterdayAgg,
         monthAgg,
         lastMonthAgg,
         udhaarAgg,
@@ -71,6 +72,7 @@ reportsRouter.get(
         yesterdayExpenses,
         recentSales,
         products,
+        totalProductsCount,
       ] = await Promise.all([
         SaleModel.aggregate<{ total: number; count: number }>([
           {
@@ -78,6 +80,22 @@ reportsRouter.get(
               shopId,
               status: "COMPLETED",
               completedAt: { $gte: startOfDay },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$total" },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        SaleModel.aggregate<{ total: number; count: number }>([
+          {
+            $match: {
+              shopId,
+              status: "COMPLETED",
+              completedAt: { $gte: startOfYesterday, $lt: startOfDay },
             },
           },
           {
@@ -164,6 +182,7 @@ reportsRouter.get(
         })
           .select("_id minStock")
           .lean(),
+        ProductModel.countDocuments({ shopId, active: true }),
       ]);
 
       const stockMap = await getAvailableStockMap(
@@ -186,20 +205,85 @@ reportsRouter.get(
         monthSalesGrowthPct = 100;
       }
 
+      const todaySalesTotal = roundMoney(todayAgg[0]?.total ?? 0);
+      const todaySalesCount = todayAgg[0]?.count ?? 0;
+      const yesterdaySalesTotal = roundMoney(yesterdayAgg[0]?.total ?? 0);
+      const yesterdaySalesCount = yesterdayAgg[0]?.count ?? 0;
+
+      let todaySalesGrowthPct: number | null = null;
+      if (yesterdaySalesTotal > 0) {
+        todaySalesGrowthPct = roundMoney(
+          ((todaySalesTotal - yesterdaySalesTotal) / yesterdaySalesTotal) * 100,
+        );
+      } else if (todaySalesTotal > 0) {
+        todaySalesGrowthPct = 100;
+      }
+
+      let todayBillsGrowthPct: number | null = null;
+      if (yesterdaySalesCount > 0) {
+        todayBillsGrowthPct = roundMoney(
+          ((todaySalesCount - yesterdaySalesCount) / yesterdaySalesCount) * 100,
+        );
+      } else if (todaySalesCount > 0) {
+        todayBillsGrowthPct = 100;
+      }
+
       const todayExpensesTotal = roundMoney(todayExpenses[0]?.total ?? 0);
       const yesterdayExpensesTotal = roundMoney(
         yesterdayExpenses[0]?.total ?? 0,
       );
 
+      const recentSaleIds = recentSales.map((s) => s._id);
+      const [lineCounts, payments] = await Promise.all([
+        recentSaleIds.length
+          ? SaleItemModel.aggregate<{
+              _id: Types.ObjectId;
+              count: number;
+            }>([
+              { $match: { saleId: { $in: recentSaleIds } } },
+              {
+                $group: {
+                  _id: "$saleId",
+                  count: { $sum: 1 },
+                },
+              },
+            ])
+          : Promise.resolve([]),
+        recentSaleIds.length
+          ? PaymentModel.find({
+              saleId: { $in: recentSaleIds },
+              status: "CONFIRMED",
+            })
+              .sort({ amount: -1 })
+              .lean()
+          : Promise.resolve([]),
+      ]);
+
+      const itemCountBySale = new Map(
+        lineCounts.map((r) => [String(r._id), r.count]),
+      );
+      const paymentBySale = new Map<string, string>();
+      for (const pay of payments) {
+        const key = String(pay.saleId);
+        if (!paymentBySale.has(key)) {
+          paymentBySale.set(key, pay.method);
+        }
+      }
+
       res.json({
-        todaySalesTotal: roundMoney(todayAgg[0]?.total ?? 0),
-        todaySalesCount: todayAgg[0]?.count ?? 0,
+        todaySalesTotal,
+        todaySalesCount,
+        yesterdaySalesTotal,
+        yesterdaySalesCount,
+        todaySalesGrowthPct,
+        todayBillsGrowthPct,
         monthSalesTotal,
         lastMonthSalesTotal,
         monthSalesGrowthPct,
         udhaarOutstanding: roundMoney(udhaarAgg[0]?.due ?? 0),
         udhaarCustomerCount: udhaarCustomers.length,
         lowStockCount,
+        totalProductsCount,
         expensesTotal: roundMoney(monthExpenses[0]?.total ?? 0),
         todayExpensesTotal,
         yesterdayExpensesTotal,
@@ -219,12 +303,18 @@ reportsRouter.get(
             typeof customer.name === "string"
               ? customer.name
               : null;
+          const saleId = String(sale._id);
+          let paymentMethod = paymentBySale.get(saleId) ?? null;
+          if (!paymentMethod && sale.amountDue > 0) paymentMethod = "CREDIT";
+          if (!paymentMethod && sale.amountPaid > 0) paymentMethod = "CASH";
           return {
-            _id: String(sale._id),
+            _id: saleId,
             invoiceNumber: sale.invoiceNumber,
             customerName,
             total: roundMoney(sale.total),
             completedAt: sale.completedAt?.toISOString?.() ?? null,
+            itemCount: itemCountBySale.get(saleId) ?? 0,
+            paymentMethod,
           };
         }),
       });

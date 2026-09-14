@@ -106,7 +106,7 @@ function unitLabel(unit?: string | null) {
   const u = (unit || "piece").trim().toLowerCase();
   if (u === "kg" || u === "g" || u === "gm") return u === "gm" ? "G" : u.toUpperCase();
   if (u === "l" || u === "lt" || u === "ltr" || u === "ml") return u === "ml" ? "ML" : "L";
-  if (u === "piece" || u === "pcs" || u === "pc") return "pack";
+  if (u === "piece" || u === "pcs" || u === "pc") return "piece";
   if (u === "packet" || u === "pkt" || u === "pack" || u === "bag") return "pack";
   if (u === "tube" || u === "bottle") return u;
   return u;
@@ -594,7 +594,7 @@ export function BillPage() {
         body: JSON.stringify({ ...item, force: true }),
       },
     );
-    addToCart(created.product);
+    selectProduct(created.product);
     await loadFavorites();
   }
 

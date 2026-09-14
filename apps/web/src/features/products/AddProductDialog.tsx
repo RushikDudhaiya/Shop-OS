@@ -551,6 +551,14 @@ export function AddProductDialog({
                       ))}
                     </select>
                   </FieldShell>
+                  {(unit === "pack" ||
+                    unit === "bag" ||
+                    unit === "kg" ||
+                    unit === "g") && (
+                    <p className="mt-1.5 text-[11px] text-forest">
+                      New Bill pe “Kitna chahiye?” (100g / 250g / 1kg) khulega.
+                    </p>
+                  )}
                 </div>
               </div>
 

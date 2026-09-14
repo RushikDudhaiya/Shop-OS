@@ -129,8 +129,8 @@ export function resolveLooseSale(p: LooseProduct): {
     };
   }
 
-  // Plain pack/bag sold by weight (250g / 1kg picker in New Bill)
-  const WEIGHT_PACK = new Set(["bag", "packet", "pack", "pkt"]);
+  // Plain pack/bag/box sold by weight (250g / 1kg picker in New Bill)
+  const WEIGHT_PACK = new Set(["bag", "packet", "pack", "pkt", "box"]);
   if (WEIGHT_PACK.has(unit)) {
     return {
       loose: true,

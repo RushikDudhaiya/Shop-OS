@@ -5,12 +5,15 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
+  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
   Clock,
+  Filter,
   Plus,
   Search,
   ShoppingCart,
@@ -161,11 +164,24 @@ function itemsQty(purchase: Purchase) {
   return purchase.itemCount;
 }
 
+function statusPillClass(status: string) {
+  const n = normalizeStatus(status);
+  if (n === "pending") return "bg-amber-50 text-amber-800";
+  if (n === "cancelled") return "bg-rose-50 text-rose-700";
+  if (n === "received") return "bg-emerald-50 text-emerald-700";
+  return "bg-paper-2 text-ink-muted";
+}
+
+function profileInitials(name: string) {
+  return supplierInitials(name || "SO");
+}
+
 const selectClass =
   "h-11 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink focus:border-forest";
 
 export function PurchasesPage() {
-  const { activeShop } = useAuth();
+  const { activeShop, user } = useAuth();
+  const navigate = useNavigate();
   const shopId = activeShop?._id;
   const roleLabel =
     activeShop?.role === "OWNER"
@@ -199,6 +215,7 @@ export function PurchasesPage() {
   const [viewPurchase, setViewPurchase] = useState<Purchase | null>(null);
   const [newPoOpen, setNewPoOpen] = useState(Boolean(queryProductId));
   const [addSupplierOpen, setAddSupplierOpen] = useState(false);
+  const [supplierSheetOpen, setSupplierSheetOpen] = useState(false);
   const [newSupplier, setNewSupplier] = useState("");
   const [newSupplierPhone, setNewSupplierPhone] = useState("");
   const [addingSupplier, setAddingSupplier] = useState(false);
@@ -505,12 +522,50 @@ export function PurchasesPage() {
   if (!shopId) return <PageLoader />;
 
   const greeting = greetingForHour(now.getHours());
+  const avatar = profileInitials(user?.name || activeShop?.name || "SO");
+  const supplierPhone = (name: string | null) =>
+    suppliers.find((s) => s.name === name)?.phone ?? null;
 
   return (
     <div className="mx-auto w-full max-w-7xl pb-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1 space-y-5">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-4 sm:space-y-5">
+          {/* Mobile header — mock */}
+          <header className="md:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="inline-flex size-10 items-center justify-center rounded-full border border-line bg-white text-ink shadow-soft"
+                onClick={() => navigate(-1)}
+                aria-label="Back"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <h1 className="text-lg font-bold text-ink">Purchases</h1>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/more"
+                  className="relative inline-flex size-10 items-center justify-center rounded-full border border-line bg-white text-ink-muted shadow-soft"
+                  aria-label="Notifications"
+                >
+                  <Bell className="size-4" />
+                  <span className="absolute right-2 top-2 size-2 rounded-full bg-danger" />
+                </Link>
+                <Link
+                  to="/more"
+                  className="inline-flex size-10 items-center justify-center rounded-full bg-[#1a1c2e] text-xs font-bold text-white"
+                >
+                  {avatar}
+                </Link>
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-ink-muted">
+              Suppliers se orders banayein aur receive karein 👋
+            </p>
+          </header>
+
+          {/* Desktop header */}
+          <header className="hidden flex-col gap-3 sm:flex-row sm:items-start sm:justify-between md:flex">
             <div className="min-w-0">
               <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
                 {greeting}, {roleLabel}{" "}
@@ -526,7 +581,7 @@ export function PurchasesPage() {
             </div>
           </header>
 
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="hidden flex-wrap items-start justify-between gap-3 md:flex">
             <div className="flex min-w-0 items-start gap-2.5">
               <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-forest">
                 <Truck className="size-5" />
@@ -570,75 +625,90 @@ export function PurchasesPage() {
             </Surface>
           ) : (
             <>
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Surface className="space-y-2 p-4">
+              {/* KPI — 2×2 mobile · 4 across desktop */}
+              <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <Surface className="space-y-2 !p-3.5 sm:!p-4">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
                       <ShoppingCart className="size-4" />
                     </span>
-                    <p className="text-sm text-ink-muted">Total purchase value</p>
+                    <p className="text-xs text-ink-muted sm:text-sm">
+                      Total purchase value
+                    </p>
                   </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                  <p className="font-display text-2xl font-semibold text-ink sm:text-3xl">
                     {formatINR(totalPurchaseValue || summary?.monthTotal || 0)}
                   </p>
                   <p className="text-xs text-ink-muted">
-                    {statusCounts.received} orders total
+                    {statusCounts.all} orders total
                   </p>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
+                <Surface className="space-y-2 !p-3.5 sm:!p-4">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
                       <Clock className="size-4" />
                     </span>
-                    <p className="text-sm text-ink-muted">Pending orders</p>
+                    <p className="text-xs text-ink-muted sm:text-sm">
+                      Pending orders
+                    </p>
                   </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                  <p className="font-display text-2xl font-semibold text-ink sm:text-3xl">
                     {statusCounts.pending}
                   </p>
                   <p className="text-xs text-ink-muted">Awaiting delivery</p>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
+                <Surface className="space-y-2 !p-3.5 sm:!p-4">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                       <CheckCircle2 className="size-4" />
                     </span>
-                    <p className="text-sm text-ink-muted">Received</p>
+                    <p className="text-xs text-ink-muted sm:text-sm">Received</p>
                   </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                  <p className="font-display text-2xl font-semibold text-ink sm:text-3xl">
                     {statusCounts.received}
                   </p>
                   <p className="text-xs text-ink-muted">This period</p>
                 </Surface>
 
-                <Surface className="space-y-2 p-4">
+                <Surface className="space-y-2 !p-3.5 sm:!p-4">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex size-9 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
                       <Users className="size-4" />
                     </span>
-                    <p className="text-sm text-ink-muted">Active suppliers</p>
+                    <p className="text-xs text-ink-muted sm:text-sm">
+                      Active suppliers
+                    </p>
                   </div>
-                  <p className="font-display text-3xl font-semibold text-ink">
+                  <p className="font-display text-2xl font-semibold text-ink sm:text-3xl">
                     {summary?.supplierCount ?? suppliers.length}
                   </p>
                   <p className="text-xs text-ink-muted">On your list</p>
                 </Surface>
               </section>
 
-              <section className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <section className="flex items-center gap-2">
                 <div className="relative min-w-0 flex-1">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
                   <input
                     className="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm outline-none focus:border-forest"
-                    placeholder="Search by PO number or supplier..."
+                    placeholder="PO number ya supplier..."
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     aria-label="Search purchases"
                   />
                 </div>
+                <button
+                  type="button"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-soft md:hidden"
+                  onClick={() => setSupplierSheetOpen(true)}
+                  aria-label="Filter by supplier"
+                >
+                  <Filter className="size-4" />
+                </button>
                 <select
-                  className="h-11 rounded-xl border border-line bg-white px-3 text-sm text-ink"
+                  className="hidden h-11 rounded-xl border border-line bg-white px-3 text-sm text-ink md:block"
                   value={supplierFilter}
                   onChange={(e) => setSupplierFilter(e.target.value)}
                   aria-label="Filter by supplier"
@@ -652,7 +722,7 @@ export function PurchasesPage() {
                 </select>
               </section>
 
-              <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0">
+              <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {(
                   [
                     ["all", "All", statusCounts.all],
@@ -672,10 +742,22 @@ export function PurchasesPage() {
                         : "border border-line bg-white text-ink-muted hover:bg-paper-2",
                     )}
                   >
-                    {label} · {count}
+                    {label} ({count})
                   </button>
                 ))}
               </div>
+
+              <Button
+                variant="primary"
+                className="w-full md:hidden"
+                leftIcon={<Plus className="size-4" />}
+                onClick={() => {
+                  setError(null);
+                  setNewPoOpen(true);
+                }}
+              >
+                New purchase order
+              </Button>
 
               {filtered.length === 0 ? (
                 <EmptyState
@@ -769,46 +851,67 @@ export function PurchasesPage() {
                     />
                   </Surface>
 
-                  <ul className="space-y-2 md:hidden">
+                  {/* Mobile PO cards — mock */}
+                  <ul className="space-y-3 md:hidden">
                     {paged.map((p) => {
                       const name = p.supplierName ?? "No supplier";
                       return (
                         <li key={p._id}>
-                          <Surface className="space-y-3 !p-3">
+                          <div className="rounded-2xl border border-line/80 bg-white p-3.5 shadow-soft">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className="font-semibold text-ink">
+                                <p className="font-bold text-ink">
                                   {poNumber(p._id)}
                                 </p>
-                                <p className="text-xs text-ink-muted">
-                                  {formatShortDate(p.purchasedAt)} · {name}
+                                <p className="mt-0.5 text-xs text-ink-muted">
+                                  {formatShortDate(p.purchasedAt)}
                                 </p>
                               </div>
-                              <Badge tone={statusTone(p.status)}>
+                              <span
+                                className={cn(
+                                  "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                                  statusPillClass(p.status),
+                                )}
+                              >
                                 {statusLabel(p.status)}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-ink-muted">
-                                {itemsQty(p)} items
                               </span>
-                              <span className="font-semibold text-ink">
+                            </div>
+
+                            <div className="mt-3 flex items-center gap-2.5">
+                              <span
+                                className={cn(
+                                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                                  supplierColor(name),
+                                )}
+                              >
+                                {supplierInitials(name)}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-bold text-ink">
+                                  {name}
+                                </p>
+                                <p className="text-xs text-ink-muted">
+                                  {itemsQty(p)} items
+                                </p>
+                              </div>
+                              <p className="shrink-0 text-sm font-bold text-ink">
                                 {formatINR(p.total)}
-                              </span>
+                              </p>
                             </div>
+
                             <button
                               type="button"
-                              className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-xs font-semibold"
+                              className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-paper-2 text-sm font-semibold text-ink"
                               onClick={() => setViewPurchase(p)}
                             >
-                              View
+                              View details
                             </button>
-                          </Surface>
+                          </div>
                         </li>
                       );
                     })}
                   </ul>
-                  <Surface padded={false} className="overflow-hidden md:hidden">
+                  <div className="md:hidden">
                     <Pagination
                       page={page}
                       pageSize={PAGE_SIZE}
@@ -816,7 +919,111 @@ export function PurchasesPage() {
                       noun="orders"
                       onPageChange={setPage}
                     />
-                  </Surface>
+                  </div>
+
+                  {/* Mobile: Top suppliers + Pending (mock image 3) */}
+                  <div className="space-y-4 md:hidden">
+                    <section>
+                      <h3 className="mb-2 text-base font-bold text-ink">
+                        Top suppliers
+                      </h3>
+                      <div className="overflow-hidden rounded-2xl border border-line/80 bg-white shadow-soft">
+                        {topSuppliers.length === 0 ? (
+                          <p className="px-4 py-5 text-sm text-ink-muted">
+                            Abhi suppliers data nahi.
+                          </p>
+                        ) : (
+                          <ul className="divide-y divide-line/70">
+                            {topSuppliers.map((s) => (
+                              <li
+                                key={s.name}
+                                className="flex items-center gap-2.5 px-4 py-3"
+                              >
+                                <span
+                                  className={cn(
+                                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                                    supplierColor(s.name),
+                                  )}
+                                >
+                                  {supplierInitials(s.name)}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-bold text-ink">
+                                    {s.name}
+                                  </p>
+                                  <p className="text-xs text-ink-muted">
+                                    {s.phone || "No phone"}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-bold text-ink">
+                                    {formatINR(s.total)}
+                                  </p>
+                                  <p className="text-[11px] text-ink-muted">
+                                    {s.orders} orders
+                                  </p>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          type="button"
+                          className="m-3 flex h-11 w-[calc(100%-1.5rem)] items-center justify-center gap-1.5 rounded-xl border border-dashed border-forest/40 bg-emerald-50/60 text-sm font-semibold text-forest"
+                          onClick={() => {
+                            setError(null);
+                            setAddSupplierOpen(true);
+                          }}
+                        >
+                          <Plus className="size-4" />
+                          Add supplier
+                        </button>
+                      </div>
+                    </section>
+
+                    <section>
+                      <h3 className="mb-2 text-base font-bold text-ink">
+                        Pending deliveries
+                      </h3>
+                      <div className="overflow-hidden rounded-2xl border border-line/80 bg-white shadow-soft">
+                        {pendingDeliveries.length === 0 ? (
+                          <p className="px-4 py-5 text-sm text-ink-muted">
+                            Koi pending delivery nahi.
+                          </p>
+                        ) : (
+                          <ul className="divide-y divide-line/70">
+                            {pendingDeliveries.map((p) => (
+                              <li
+                                key={p._id}
+                                className="flex items-center gap-2.5 px-4 py-3"
+                              >
+                                <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                                  <Truck className="size-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-bold text-ink">
+                                    {poNumber(p._id)} ·{" "}
+                                    {p.supplierName ?? "Supplier"}
+                                  </p>
+                                  <p className="text-xs text-ink-muted">
+                                    {formatShortDate(p.purchasedAt)}
+                                  </p>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                                    statusPillClass(p.status),
+                                  )}
+                                >
+                                  {statusLabel(p.status)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </section>
+                  </div>
                 </>
               )}
             </>
@@ -824,7 +1031,7 @@ export function PurchasesPage() {
         </div>
 
         {!loading || summary ? (
-          <aside className="w-full shrink-0 space-y-4 xl:sticky xl:top-4 xl:w-[300px]">
+          <aside className="hidden w-full shrink-0 space-y-4 md:block xl:sticky xl:top-4 xl:w-[300px]">
             <Surface className="p-4">
               <h3 className="mb-3 text-sm font-semibold text-ink">
                 Top suppliers
@@ -1081,66 +1288,159 @@ export function PurchasesPage() {
 
       {viewPurchase ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 sm:items-center sm:p-4"
           onClick={() => setViewPurchase(null)}
         >
           <div
-            className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-soft"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white shadow-soft sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-ink">
-                  {poNumber(viewPurchase._id)}
-                </h2>
-                <p className="text-sm text-ink-muted">
-                  {formatShortDate(viewPurchase.purchasedAt)} ·{" "}
-                  {viewPurchase.supplierName ?? "No supplier"}
-                </p>
-              </div>
-              <Badge tone={statusTone(viewPurchase.status)}>
-                {statusLabel(viewPurchase.status)}
-              </Badge>
+            <div className="flex justify-center pt-2 sm:hidden">
+              <span className="h-1 w-10 rounded-full bg-line" />
+            </div>
+            <div className="flex items-start justify-between gap-3 px-5 pb-2 pt-3">
+              <h2 className="text-lg font-bold text-ink">
+                {poNumber(viewPurchase._id)}
+              </h2>
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-full bg-paper-2 text-ink-muted"
+                onClick={() => setViewPurchase(null)}
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
             </div>
 
-            <ul className="mt-4 space-y-2">
-              {viewPurchase.items.length === 0 ? (
-                <li className="text-sm text-ink-muted">No line items.</li>
-              ) : (
-                viewPurchase.items.map((item, idx) => (
-                  <li
-                    key={`${item.name}-${idx}`}
-                    className="flex items-start justify-between gap-3 rounded-xl bg-paper-2/70 px-3 py-2.5 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">{item.name}</p>
-                      <p className="text-xs text-ink-muted">
-                        {item.quantity} × {formatINR(item.unitCost)}
+            <dl className="divide-y divide-line/70 border-y border-line/70 px-5">
+              {(
+                [
+                  ["Supplier", viewPurchase.supplierName ?? "No supplier"],
+                  [
+                    "Phone",
+                    supplierPhone(viewPurchase.supplierName) || "—",
+                  ],
+                  ["Order date", formatShortDate(viewPurchase.purchasedAt)],
+                  [
+                    "Expected delivery",
+                    viewPurchase.purchasedAt
+                      ? new Date(viewPurchase.purchasedAt)
+                          .toISOString()
+                          .slice(0, 10)
+                      : "—",
+                  ],
+                  ["Status", statusLabel(viewPurchase.status)],
+                ] as const
+              ).map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-3 py-3 text-sm"
+                >
+                  <dt className="text-ink-muted">{label}</dt>
+                  <dd className="text-right font-semibold text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="px-5 py-4">
+              <p className="mb-2 text-sm font-bold text-ink-muted">Items</p>
+              <ul className="space-y-2">
+                {viewPurchase.items.length === 0 ? (
+                  <li className="text-sm text-ink-muted">No line items.</li>
+                ) : (
+                  viewPurchase.items.map((item, idx) => (
+                    <li
+                      key={`${item.name}-${idx}`}
+                      className="flex items-start justify-between gap-3 border-b border-dashed border-line/80 pb-2 text-sm last:border-0"
+                    >
+                      <p className="min-w-0 font-medium text-ink">
+                        {item.name} × {item.quantity}
                       </p>
-                    </div>
-                    <p className="shrink-0 font-semibold text-ink">
-                      {formatINR(item.lineTotal)}
-                    </p>
-                  </li>
-                ))
-              )}
-            </ul>
+                      <p className="shrink-0 font-bold text-ink">
+                        {formatINR(item.lineTotal)}
+                      </p>
+                    </li>
+                  ))
+                )}
+              </ul>
 
-            <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-              <span className="text-sm text-ink-muted">Total</span>
-              <span className="font-display text-xl font-semibold text-ink">
-                {formatINR(viewPurchase.total)}
-              </span>
+              <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
+                <span className="text-sm font-bold text-ink">Total</span>
+                <span className="text-lg font-bold text-ink">
+                  {formatINR(viewPurchase.total)}
+                </span>
+              </div>
+
+              <Button
+                className="mt-4"
+                variant="secondary"
+                fullWidth
+                onClick={() => setViewPurchase(null)}
+              >
+                Close
+              </Button>
             </div>
+          </div>
+        </div>
+      ) : null}
 
-            <Button
-              className="mt-4"
-              variant="secondary"
-              fullWidth
-              onClick={() => setViewPurchase(null)}
-            >
-              Close
-            </Button>
+      {supplierSheetOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 md:hidden"
+          onClick={() => setSupplierSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-white shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-2">
+              <span className="h-1 w-10 rounded-full bg-line" />
+            </div>
+            <div className="flex items-center justify-between px-5 pb-2 pt-3">
+              <h2 className="text-base font-bold text-ink">Filter by supplier</h2>
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-full bg-paper-2 text-ink-muted"
+                onClick={() => setSupplierSheetOpen(false)}
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <ul className="max-h-[55dvh] overflow-y-auto border-t border-line/70 pb-6">
+              <li>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2 border-b border-line/70 px-5 py-3.5 text-center text-sm font-semibold text-ink"
+                  onClick={() => {
+                    setSupplierFilter("all");
+                    setSupplierSheetOpen(false);
+                  }}
+                >
+                  All suppliers
+                  {supplierFilter === "all" ? (
+                    <Check className="size-4 text-forest" />
+                  ) : null}
+                </button>
+              </li>
+              {suppliers.map((s) => (
+                <li key={s._id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-2 border-b border-line/70 px-5 py-3.5 text-center text-sm font-medium text-ink"
+                    onClick={() => {
+                      setSupplierFilter(s._id);
+                      setSupplierSheetOpen(false);
+                    }}
+                  >
+                    {s.name}
+                    {supplierFilter === s._id ? (
+                      <Check className="size-4 text-forest" />
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       ) : null}
