@@ -23,6 +23,7 @@ import { rateLimit } from "../../middleware/rate-limit.js";
 import { MembershipModel } from "../memberships/membership.model.js";
 import { ShopModel } from "../shops/shop.model.js";
 import { OtpChallengeModel } from "./otp.model.js";
+import { RealtimeTicketModel } from "./realtime-ticket.model.js";
 import { SessionModel } from "./session.model.js";
 import { UserModel } from "./user.model.js";
 
@@ -207,6 +208,22 @@ authRouter.get("/auth/me", requireAuth, async (req, res, next) => {
         role: memberships.find((m) => String(m.shopId) === String(s._id))?.role,
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Short-lived ticket for Socket.IO (works when web and API are on different domains). */
+authRouter.post("/auth/realtime-ticket", requireAuth, async (req, res, next) => {
+  try {
+    const ticket = generateSessionToken();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await RealtimeTicketModel.create({
+      tokenHash: hashValue(ticket),
+      userId: req.user!._id,
+      expiresAt,
+    });
+    res.json({ ticket, expiresAt: expiresAt.toISOString() });
   } catch (err) {
     next(err);
   }

@@ -256,6 +256,10 @@ export async function createSaleForShop(input: {
     ...bundle,
     change: paymentResult?.changeGiven ?? 0,
     receivedAmount: paymentResult?.receivedAmount ?? null,
+    stockUpdates: stockUpdates.map((u) => ({
+      productId: String(u.productId),
+      currentStock: u.currentStock,
+    })),
   };
 }
 

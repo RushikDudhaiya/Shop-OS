@@ -38,7 +38,7 @@ import { OVERDUE_DAYS } from "@/features/customers/customerUtils";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
-import { onStockUpdated } from "@/lib/shopRealtime";
+import { dispatchStockUpdated, onStockUpdated } from "@/lib/shopRealtime";
 import { QuickAddDialog } from "@/features/products/QuickAddDialog";
 import { categoryArtFor } from "@/features/products/categoryArt";
 import { inferProductCategoryGroup } from "@shop-os/shared";
@@ -68,6 +68,7 @@ type SaleResponse = {
   };
   change?: number;
   payments: Array<{ method: string }>;
+  stockUpdates?: Array<{ productId: string; currentStock: number }>;
 };
 
 type ShopTaxSettings = {
@@ -374,6 +375,18 @@ export function BillPage() {
       setFavorites((prev) => patch(prev));
     });
   }, [shopId]);
+
+  // Fallback: when tab becomes visible again, refresh catalog (covers missed sockets).
+  useEffect(() => {
+    if (!shopId) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadCatalog(q);
+      void loadFavorites();
+    };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [shopId, q, loadCatalog, loadFavorites]);
 
   useEffect(() => {
     if (!shopId) return;
@@ -890,6 +903,10 @@ export function BillPage() {
         method: "POST",
         body: JSON.stringify(body),
       });
+
+      if (res.stockUpdates?.length) {
+        dispatchStockUpdated({ shopId, updates: res.stockUpdates });
+      }
 
       pushRecentIds(cart.map((l) => l.productId));
       setCompleted(
