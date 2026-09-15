@@ -19,6 +19,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  ScanBarcode,
   Search,
   ShoppingCart,
   Sparkles,
@@ -35,9 +36,11 @@ import {
   PageLoader,
   Surface,
 } from "@/components/ui";
+import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
+import { findProductByBarcode } from "@/lib/findProductByBarcode";
 import { onStockUpdated } from "@/lib/shopRealtime";
 import { BulkAddPanel } from "./BulkAddPanel";
 import { AddProductDialog } from "./AddProductDialog";
@@ -355,7 +358,11 @@ export function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [initialName, setInitialName] = useState("");
+  const [initialBarcode, setInitialBarcode] = useState("");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -384,6 +391,12 @@ export function ProductsPage() {
       if (!opts?.silent) setLoading(false);
     }
   }, [shopId, q]);
+
+  useEffect(() => {
+    if (!scanMsg) return;
+    const t = window.setTimeout(() => setScanMsg(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [scanMsg]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -542,17 +555,44 @@ export function ProductsPage() {
     URL.revokeObjectURL(url);
   }
 
-  function openAdd(name = "") {
+  function openAdd(name = "", barcode = "") {
     setEditingProduct(null);
     setInitialName(name || q);
+    setInitialBarcode(barcode);
     setDialogOpen(true);
   }
 
   function openEdit(product: Product) {
     setInitialName("");
+    setInitialBarcode("");
     setEditingProduct(product);
     setDialogOpen(true);
     setMenuId(null);
+  }
+
+  async function handleBarcodeScan(code: string) {
+    if (!shopId || scanBusy) return;
+    setScanBusy(true);
+    setScannerOpen(false);
+    setScanMsg(null);
+    try {
+      const product = await findProductByBarcode(shopId, code);
+      if (product) {
+        openEdit(product);
+        setScanMsg(`${product.name} — stock / price update kar sakte ho`);
+        return;
+      }
+      openAdd("", code);
+      setScanMsg(`Naya product — barcode ${code} fill ho gaya, stock set karo`);
+    } catch (err) {
+      setScanMsg(
+        err instanceof ApiRequestError
+          ? err.body.message
+          : "Barcode scan fail hua",
+      );
+    } finally {
+      setScanBusy(false);
+    }
   }
 
   async function confirmDeleteProduct() {
@@ -719,15 +759,26 @@ export function ProductsPage() {
           </section>
 
           <section className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
-              <input
-                className="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm outline-none focus:border-forest"
-                placeholder="Search products by name, barcode, SKU..."
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                aria-label="Search products"
-              />
+            <div className="flex min-w-0 flex-1 gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+                <input
+                  className="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm outline-none focus:border-forest"
+                  placeholder="Search products by name, barcode, SKU..."
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  aria-label="Search products"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={scanBusy}
+                onClick={() => setScannerOpen(true)}
+                className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-paper-2 disabled:opacity-60"
+              >
+                <ScanBarcode className="size-4" />
+                Scan
+              </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -1127,10 +1178,12 @@ export function ProductsPage() {
         shopId={shopId}
         open={dialogOpen}
         initialName={initialName}
+        initialBarcode={initialBarcode}
         product={editingProduct}
         onClose={() => {
           setDialogOpen(false);
           setEditingProduct(null);
+          setInitialBarcode("");
         }}
         onCreated={(product) => {
           setItems((prev) => [product, ...prev.filter((p) => p._id !== product._id)]);
@@ -1148,6 +1201,20 @@ export function ProductsPage() {
           setEditingProduct(null);
         }}
       />
+
+      <BarcodeScannerSheet
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(code) => void handleBarcodeScan(code)}
+        title="Scan product"
+        hint="Product milne pe edit / stock modal khulega"
+      />
+
+      {scanMsg ? (
+        <p className="fixed bottom-20 left-1/2 z-[90] max-w-sm -translate-x-1/2 rounded-xl bg-ink px-4 py-2 text-center text-sm text-white shadow-soft md:bottom-6">
+          {scanMsg}
+        </p>
+      ) : null}
 
       {deleteTarget ? (
         <div

@@ -24,7 +24,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { getShopCatalog } from "@shop-os/shared";
+import { inferProductCategoryGroup } from "@shop-os/shared";
 import {
   AppPageHeader,
   Button,
@@ -36,12 +36,13 @@ import {
 import type { CustomerRow } from "@/features/customers/types";
 import { OVERDUE_DAYS } from "@/features/customers/customerUtils";
 import { useAuth } from "@/features/auth/AuthContext";
+import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
+import { findProductByBarcode } from "@/lib/findProductByBarcode";
 import { dispatchStockUpdated, onStockUpdated } from "@/lib/shopRealtime";
 import { QuickAddDialog } from "@/features/products/QuickAddDialog";
 import { categoryArtFor } from "@/features/products/categoryArt";
-import { inferProductCategoryGroup } from "@shop-os/shared";
 import type {
   CartLine,
   Product,
@@ -168,17 +169,6 @@ function customerInitials(name: string) {
   return name.slice(0, 2).toUpperCase() || "CU";
 }
 
-function quickItemIcon(name: string) {
-  const n = name.toLowerCase();
-  if (/toffee|candy|mithai/.test(n)) return "🍬";
-  if (/choco/.test(n)) return "🍫";
-  if (/biscuit|cookie|parle/.test(n)) return "🍪";
-  if (/snack|chip|namkeen/.test(n)) return "🥨";
-  if (/screw|nail|washer|bolt/.test(n)) return "🔩";
-  if (/cable|wire|tie/.test(n)) return "🔌";
-  return "✦";
-}
-
 function readRecentIds(): string[] {
   try {
     const raw = sessionStorage.getItem(RECENT_KEY);
@@ -238,10 +228,6 @@ export function BillPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const { activeShop } = useAuth();
   const shopId = activeShop?._id;
-  const shopCatalog = useMemo(
-    () => getShopCatalog(activeShop?.businessType),
-    [activeShop?.businessType],
-  );
   const [q, setQ] = useState("");
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [favorites, setFavorites] = useState<Product[]>([]);
@@ -263,6 +249,8 @@ export function BillPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [holdMsg, setHoldMsg] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
   const [showRecent, setShowRecent] = useState(false);
   const [weightPick, setWeightPick] = useState<{
     product: Product;
@@ -749,6 +737,38 @@ export function BillPage() {
     addToCart(product, 1);
   }
 
+  async function handleBarcodeScan(code: string) {
+    if (!shopId || scanBusy) return;
+    setScanBusy(true);
+    setScannerOpen(false);
+    try {
+      const product = await findProductByBarcode(shopId, code);
+      if (!product) {
+        setHoldMsg(`Barcode ${code} ka product nahi mila`);
+        return;
+      }
+      if (isProductOutOfStock(product)) {
+        setHoldMsg(`${product.name} out of stock hai`);
+        return;
+      }
+      selectProduct(product);
+      if (!isLooseProduct(product)) {
+        setHoldMsg(`${product.name} cart mein add ho gaya`);
+        setMobileCartOpen(true);
+      } else {
+        setHoldMsg(`${product.name} — quantity select karo`);
+      }
+    } catch (err) {
+      setHoldMsg(
+        err instanceof ApiRequestError
+          ? err.body.message
+          : "Barcode scan fail hua",
+      );
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
   function bumpQty(productId: string, delta: number) {
     setCart((prev) =>
       prev
@@ -759,29 +779,6 @@ export function BillPage() {
         )
         .filter((l) => l.quantity > 0),
     );
-  }
-
-  async function ensureQuickItem(item: (typeof shopCatalog.quickItems)[number]) {
-    if (!shopId) return;
-    const existing = await api<ProductListResponse>(
-      `/api/shops/${shopId}/products?q=${encodeURIComponent(item.name)}&pageSize=5`,
-    );
-    const match = existing.items.find(
-      (p) => p.name.toLowerCase() === item.name.toLowerCase(),
-    );
-    if (match) {
-      selectProduct(match);
-      return;
-    }
-    const created = await api<{ product: Product }>(
-      `/api/shops/${shopId}/products`,
-      {
-        method: "POST",
-        body: JSON.stringify({ ...item, force: true }),
-      },
-    );
-    selectProduct(created.product);
-    await loadFavorites();
   }
 
   async function completeSale(payload: {
@@ -1067,7 +1064,8 @@ export function BillPage() {
           </div>
           <button
             type="button"
-            onClick={() => searchRef.current?.focus()}
+            onClick={() => setScannerOpen(true)}
+            disabled={scanBusy}
             className="bill-scan-btn hover:bg-paper-2"
           >
             <ScanBarcode className="size-4" />
@@ -1209,27 +1207,6 @@ export function BillPage() {
               document.body,
             )
           : null}
-
-        {!q.trim() ? (
-          <div>
-            <p className="bill-quick-add-label">Quick Add</p>
-            <div className="bill-quick-add-row">
-              {shopCatalog.quickItems.map((item) => (
-                <button
-                  key={item.name}
-                  type="button"
-                  onClick={() => void ensureQuickItem(item)}
-                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[16px] border border-line bg-white px-3 text-xs font-medium text-ink shadow-soft hover:bg-paper-2"
-                >
-                  <span className="text-base leading-none" aria-hidden>
-                    {quickItemIcon(item.name)}
-                  </span>
-                  {item.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {!q.trim() && categoryChips.length > 0 ? (
           <div className="bill-category-row">
@@ -2311,6 +2288,14 @@ export function BillPage() {
           }}
         />
       ) : null}
+
+      <BarcodeScannerSheet
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(code) => void handleBarcodeScan(code)}
+        title="Scan product"
+        hint="Bill ke liye barcode scan karo — product cart mein add hoga"
+      />
 
       {payMethod ? (
         <PaymentSheet

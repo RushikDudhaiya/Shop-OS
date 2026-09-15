@@ -188,15 +188,6 @@
   color: var(--color-ink, #1a1a1a);
 }
 
-.bill-quick-add-label {
-  margin-bottom: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-ink-muted, #6b6560);
-}
-
 .bill-products-toolbar {
   display: flex;
   align-items: center;
@@ -844,18 +835,6 @@
   font-size: 12px;
   font-weight: 500;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.bill-quick-add-row {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
-}
-
-.bill-quick-add-row::-webkit-scrollbar {
-  display: none;
 }
 
 .bill-tips-bar {

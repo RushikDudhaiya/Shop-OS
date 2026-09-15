@@ -33,6 +33,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   initialName?: string;
+  /** Prefill barcode when creating from a scan. */
+  initialBarcode?: string;
   /** When set, dialog edits this product instead of creating. */
   product?: Product | null;
   onCreated: (product: Product) => void;
@@ -96,6 +98,7 @@ export function AddProductDialog({
   open,
   onClose,
   initialName = "",
+  initialBarcode = "",
   product = null,
   onCreated,
   onUpdated,
@@ -161,7 +164,7 @@ export function AddProductDialog({
           : "Snacks",
       );
       setUnit("pack");
-      setBarcode("");
+      setBarcode(initialBarcode);
       setGst("0");
       setPurchasePrice("");
       setSellingPrice("");
@@ -189,7 +192,7 @@ export function AddProductDialog({
         setCategories([]);
       }
     })();
-  }, [open, initialName, shopId, product]);
+  }, [open, initialName, initialBarcode, shopId, product]);
 
   const categoryOptions = useMemo(() => {
     const names = new Set([
