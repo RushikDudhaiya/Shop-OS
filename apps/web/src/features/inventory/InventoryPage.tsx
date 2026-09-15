@@ -37,6 +37,7 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { categoryArtFor } from "@/features/products/categoryArt";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
+import { onStockUpdated } from "@/lib/shopRealtime";
 
 type StockStatus = "ok" | "low" | "out";
 
@@ -1008,6 +1009,25 @@ export function InventoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    return onStockUpdated((payload) => {
+      if (payload.shopId !== shopId) return;
+      const map = new Map(
+        payload.updates.map((u) => [u.productId, u.currentStock]),
+      );
+      setItems((prev) =>
+        prev.map((item) =>
+          map.has(item.productId)
+            ? {
+                ...item,
+                availableStock: map.get(item.productId) ?? item.availableStock,
+              }
+            : item,
+        ),
+      );
+    });
+  }, [shopId]);
 
   useEffect(() => {
     setPage(1);

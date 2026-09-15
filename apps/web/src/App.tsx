@@ -18,6 +18,7 @@ import { MorePage } from "@/features/settings/MorePage";
 import { StaffPage } from "@/features/settings/StaffPage";
 import { PurchasesPage } from "@/features/purchases/PurchasesPage";
 import { AutopilotPage } from "@/features/autopilot/AutopilotPage";
+import { ShopRealtimeBridge } from "@/lib/shopRealtime";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ShopRealtimeBridge />
         <BrowserRouter>
           <Routes>
             <Route element={<GuestOnly />}>

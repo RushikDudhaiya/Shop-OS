@@ -13,7 +13,8 @@ import { requireShopMember } from "../../middleware/require-shop-member.js";
 import { canViewCost } from "../../lib/privacy.js";
 import { writeAudit } from "../audit/audit.model.js";
 import { InventoryTransactionModel } from "../inventory/inventory-transaction.model.js";
-import { getAvailableStock, getAvailableStockMap } from "../inventory/stock.js";
+import { applyStockDelta, getAvailableStock, getAvailableStockMap } from "../inventory/stock.js";
+import { emitStockUpdated } from "../realtime/socket.js";
 import { ProductCategoryModel } from "./category.model.js";
 import { ProductModel } from "./product.model.js";
 import { suggestProductImage } from "./suggest-image.js";
@@ -178,6 +179,15 @@ productsRouter.post(
           unitCost: body.purchasePrice,
           createdBy: req.user!._id,
         });
+        const currentStock = await applyStockDelta({
+          shopId,
+          productId: product._id,
+          delta: body.openingStock,
+          allowNegative: true,
+        });
+        emitStockUpdated(shopId, [
+          { productId: product._id, currentStock },
+        ]);
       }
 
       const stock = await getAvailableStock(shopId, product._id);
@@ -266,6 +276,12 @@ productsRouter.post(
             sourceId: product._id,
             unitCost: row.purchasePrice,
             createdBy: req.user!._id,
+          });
+          await applyStockDelta({
+            shopId,
+            productId: product._id,
+            delta: row.openingStock,
+            allowNegative: true,
           });
         }
         created.push(serializeProduct(product.toObject(), row.openingStock, allowCost));

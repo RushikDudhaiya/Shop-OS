@@ -366,6 +366,24 @@ export function MorePage() {
     await loadMembers();
   }
 
+  async function removeMember(member: Member) {
+    if (!shopId || member.role === "OWNER") return;
+    const label = member.name || member.phone || "staff";
+    if (!window.confirm(`${label} ko staff se hataana hai?`)) return;
+    setError(null);
+    try {
+      await api(`/api/shops/${shopId}/members/${member._id}`, {
+        method: "DELETE",
+      });
+      setMembers((prev) => prev.filter((m) => m._id !== member._id));
+      setMsg("Staff removed");
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.body.message : "Delete fail",
+      );
+    }
+  }
+
   async function backupNow() {
     if (!shopId) return;
     setMsg(null);
@@ -1014,7 +1032,11 @@ export function MorePage() {
                 />
               ) : (
                 <ul className="space-y-2">
-                  {members.map((m) => (
+                  {members.map((m) => {
+                    const canDelete =
+                      m.role !== "OWNER" &&
+                      (!user?._id || m.userId !== user._id);
+                    return (
                     <li key={m._id}>
                       <Surface className="flex flex-wrap items-center justify-between gap-3 !py-3">
                         <div>
@@ -1023,7 +1045,7 @@ export function MorePage() {
                           </p>
                           <p className="text-sm text-ink-muted">{m.phone}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge tone="forest">{m.role}</Badge>
                           {m.role !== "OWNER" ? (
                             <select
@@ -1044,10 +1066,23 @@ export function MorePage() {
                               ))}
                             </select>
                           ) : null}
+                          {canDelete ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="!border-danger/30 !text-danger hover:!bg-danger-soft"
+                              leftIcon={<Trash2 className="size-3.5" />}
+                              onClick={() => void removeMember(m)}
+                            >
+                              Delete
+                            </Button>
+                          ) : null}
                         </div>
                       </Surface>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
               <Link to="/staff" className="text-sm font-medium text-forest">

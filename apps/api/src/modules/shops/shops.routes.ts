@@ -164,6 +164,31 @@ shopsRouter.post(
         userId: user._id,
       });
       if (existing) {
+        if (existing.status === "DISABLED") {
+          existing.status = "ACTIVE";
+          existing.role = body.role;
+          existing.permissions = [
+            ...DEFAULT_ROLE_PERMISSIONS[body.role],
+          ] as typeof existing.permissions;
+          await existing.save();
+          if (body.name && !user.name) {
+            user.name = body.name;
+            await user.save();
+          }
+          res.status(200).json({
+            membership: {
+              _id: String(existing._id),
+              shopId: String(existing.shopId),
+              userId: String(existing.userId),
+              role: existing.role,
+              permissions: existing.permissions,
+              status: existing.status,
+              phone: user.phone,
+              name: user.name ?? null,
+            },
+          });
+          return;
+        }
         throw conflict("User already a member of this shop");
       }
 
@@ -284,6 +309,46 @@ shopsRouter.patch(
           permissions: membership.permissions,
         },
       });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+shopsRouter.delete(
+  "/shops/:shopId/members/:membershipId",
+  requireAuth,
+  requireShopMember("shop.settings"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const membership = await MembershipModel.findOne({
+        _id: req.params.membershipId,
+        shopId: req.shopContext!.shopId,
+      });
+      if (!membership) throw notFound("Member not found");
+      if (membership.role === "OWNER") {
+        throw badRequest("Owner ko delete nahi kar sakte");
+      }
+      if (String(membership.userId) === String(req.user!._id)) {
+        throw badRequest("Apne aap ko delete nahi kar sakte");
+      }
+
+      membership.status = "DISABLED";
+      await membership.save();
+
+      await writeAudit({
+        shopId: req.shopContext!.shopId,
+        actorUserId: req.user!._id,
+        action: "membership.remove",
+        entityType: "Membership",
+        entityId: String(membership._id),
+        metadata: {
+          userId: String(membership.userId),
+          role: membership.role,
+        },
+      });
+
+      res.json({ ok: true, membershipId: String(membership._id) });
     } catch (err) {
       next(err);
     }

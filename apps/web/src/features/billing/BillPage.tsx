@@ -38,6 +38,7 @@ import { OVERDUE_DAYS } from "@/features/customers/customerUtils";
 import { useAuth } from "@/features/auth/AuthContext";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
+import { onStockUpdated } from "@/lib/shopRealtime";
 import { QuickAddDialog } from "@/features/products/QuickAddDialog";
 import { categoryArtFor } from "@/features/products/categoryArt";
 import { inferProductCategoryGroup } from "@shop-os/shared";
@@ -356,6 +357,23 @@ export function BillPage() {
   useEffect(() => {
     void loadFavorites();
   }, [loadFavorites]);
+
+  useEffect(() => {
+    return onStockUpdated((payload) => {
+      if (payload.shopId !== shopId) return;
+      const map = new Map(
+        payload.updates.map((u) => [u.productId, u.currentStock]),
+      );
+      const patch = (list: Product[]) =>
+        list.map((p) =>
+          map.has(p._id)
+            ? { ...p, availableStock: map.get(p._id) ?? p.availableStock }
+            : p,
+        );
+      setCatalog((prev) => patch(prev));
+      setFavorites((prev) => patch(prev));
+    });
+  }, [shopId]);
 
   useEffect(() => {
     if (!shopId) return;

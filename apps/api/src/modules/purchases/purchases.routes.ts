@@ -6,6 +6,8 @@ import { requireAuth } from "../../middleware/require-auth.js";
 import { requireShopMember } from "../../middleware/require-shop-member.js";
 import { writeAudit } from "../audit/audit.model.js";
 import { InventoryTransactionModel } from "../inventory/inventory-transaction.model.js";
+import { applyStockDelta } from "../inventory/stock.js";
+import { emitStockUpdated } from "../realtime/socket.js";
 import { ProductModel } from "../products/product.model.js";
 import { roundMoney } from "../sales/sale.service.js";
 import {
@@ -370,6 +372,18 @@ purchasesRouter.post(
         }));
       if (stockDocs.length) {
         await InventoryTransactionModel.insertMany(stockDocs);
+        const stockUpdates = [];
+        for (const l of lines) {
+          if (!l.trackStock) continue;
+          const currentStock = await applyStockDelta({
+            shopId,
+            productId: l.productId,
+            delta: l.quantity,
+            allowNegative: true,
+          });
+          stockUpdates.push({ productId: l.productId, currentStock });
+        }
+        emitStockUpdated(shopId, stockUpdates);
       }
 
       // update purchase prices when cost known

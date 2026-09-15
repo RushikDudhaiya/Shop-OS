@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ROLES, type Role } from "@shop-os/shared";
-import { Users } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
 import {
   AppPageHeader,
   Badge,
@@ -22,7 +22,7 @@ type Member = {
 };
 
 export function StaffPage() {
-  const { activeShop } = useAuth();
+  const { activeShop, user } = useAuth();
   const shopId = activeShop?._id;
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,7 @@ export function StaffPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("CASHIER");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!shopId) return;
@@ -80,11 +81,39 @@ export function StaffPage() {
 
   async function changeRole(membershipId: string, nextRole: Role) {
     if (!shopId) return;
-    await api(`/api/shops/${shopId}/members/${membershipId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ role: nextRole }),
-    });
-    await load();
+    setError(null);
+    try {
+      await api(`/api/shops/${shopId}/members/${membershipId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: nextRole }),
+      });
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.body.message : "Role update fail",
+      );
+    }
+  }
+
+  async function removeMember(member: Member) {
+    if (!shopId) return;
+    if (member.role === "OWNER") return;
+    const label = member.name || member.phone || "staff";
+    if (!window.confirm(`${label} ko staff se hataana hai?`)) return;
+    setDeletingId(member._id);
+    setError(null);
+    try {
+      await api(`/api/shops/${shopId}/members/${member._id}`, {
+        method: "DELETE",
+      });
+      setMembers((prev) => prev.filter((m) => m._id !== member._id));
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.body.message : "Delete fail",
+      );
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (!shopId) return <PageLoader />;
@@ -139,36 +168,54 @@ export function StaffPage() {
         <EmptyState icon={<Users className="size-7" />} title="No staff yet" />
       ) : (
         <ul className="space-y-2">
-          {members.map((m) => (
-            <li key={m._id}>
-              <Surface className="flex flex-wrap items-center justify-between gap-3 !py-3">
-                <div>
-                  <p className="font-medium">{m.name ?? m.phone ?? "User"}</p>
-                  <p className="text-sm text-ink-muted">{m.phone}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone="forest">{m.role}</Badge>
-                  {m.role !== "OWNER" ? (
-                    <select
-                      className="h-10 rounded-xl border border-line px-2 text-sm"
-                      value={m.role}
-                      onChange={(e) =>
-                        void changeRole(m._id, e.target.value as Role)
-                      }
-                      aria-label="Change role"
-                    >
-                      {ROLES.filter((r: Role) => r !== "OWNER").map(
-                        (r: Role) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                </div>
-              </Surface>
-            </li>
-          ))}
+          {members.map((m) => {
+            const canDelete =
+              m.role !== "OWNER" && (!user?._id || m.userId !== user._id);
+            return (
+              <li key={m._id}>
+                <Surface className="flex flex-wrap items-center justify-between gap-3 !py-3">
+                  <div>
+                    <p className="font-medium">{m.name ?? m.phone ?? "User"}</p>
+                    <p className="text-sm text-ink-muted">{m.phone}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="forest">{m.role}</Badge>
+                    {m.role !== "OWNER" ? (
+                      <select
+                        className="h-10 rounded-xl border border-line px-2 text-sm"
+                        value={m.role}
+                        onChange={(e) =>
+                          void changeRole(m._id, e.target.value as Role)
+                        }
+                        aria-label="Change role"
+                      >
+                        {ROLES.filter((r: Role) => r !== "OWNER").map(
+                          (r: Role) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    ) : null}
+                    {canDelete ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="!border-danger/30 !text-danger hover:!bg-danger-soft"
+                        leftIcon={<Trash2 className="size-3.5" />}
+                        loading={deletingId === m._id}
+                        onClick={() => void removeMember(m)}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                </Surface>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

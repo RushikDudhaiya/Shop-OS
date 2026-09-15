@@ -1,4 +1,10 @@
-import { Schema, model, type InferSchemaType, type Types } from "mongoose";
+import {
+  Schema,
+  model,
+  type ClientSession,
+  type InferSchemaType,
+  type Types,
+} from "mongoose";
 
 /** Per-shop invoice counter */
 const shopCounterSchema = new Schema(
@@ -23,12 +29,13 @@ export const ShopCounterModel = model("ShopCounter", shopCounterSchema);
 export async function nextInvoiceNumber(
   shopId: Types.ObjectId,
   prefix = "INV",
+  session?: ClientSession | null,
 ): Promise<string> {
   const counter = await ShopCounterModel.findOneAndUpdate(
     { shopId },
     { $inc: { invoiceSeq: 1 } },
-    { upsert: true, new: true },
+    { upsert: true, new: true, session: session ?? undefined },
   );
-  const seq = String(counter.invoiceSeq).padStart(4, "0");
+  const seq = String(counter!.invoiceSeq).padStart(4, "0");
   return `${prefix}-${seq}`;
 }

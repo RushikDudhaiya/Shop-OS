@@ -1,8 +1,9 @@
 import { createPaymentSchema, createSaleSchema } from "@shop-os/shared";
-import type { Types } from "mongoose";
+import mongoose, { type ClientSession, type Types } from "mongoose";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { InventoryTransactionModel } from "../inventory/inventory-transaction.model.js";
-import { getAvailableStock } from "../inventory/stock.js";
+import { applyStockDelta, getAvailableStock } from "../inventory/stock.js";
+import { emitStockUpdated } from "../realtime/socket.js";
 import { CustomerModel } from "../customers/customer.model.js";
 import { PaymentModel } from "../payments/payment.model.js";
 import { ProductModel } from "../products/product.model.js";
@@ -12,6 +13,32 @@ import { SaleItemModel } from "./sale-item.model.js";
 import { SaleModel } from "./sale.model.js";
 
 type AuthUserId = Types.ObjectId;
+
+async function withOptionalTransaction<T>(
+  work: (session: ClientSession | null) => Promise<T>,
+): Promise<T> {
+  const session = await mongoose.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Standalone MongoDB (no replica set) — fall back without transaction.
+    if (
+      /Transaction numbers are only allowed|replica set|not supported/i.test(
+        msg,
+      )
+    ) {
+      return work(null);
+    }
+    throw err;
+  } finally {
+    await session.endSession();
+  }
+}
 
 export async function createSaleForShop(input: {
   shopId: Types.ObjectId;
@@ -76,15 +103,6 @@ export async function createSaleForShop(input: {
     const lineTotal = roundMoney(unitPrice * item.quantity - discount + tax);
     if (lineTotal < 0) throw badRequest("Invalid line total");
 
-    if (body.complete && product.trackStock) {
-      const available = await getAvailableStock(input.shopId, product._id);
-      if (!allowNegative && available < item.quantity) {
-        throw badRequest(
-          `Stock kam hai: ${product.name} (available ${available})`,
-        );
-      }
-    }
-
     lines.push({
       productId: product._id,
       productNameSnapshot: product.name,
@@ -114,80 +132,126 @@ export async function createSaleForShop(input: {
   }
 
   const prefix = shop.settings?.invoicePrefix || "INV";
-  const invoiceNumber = await nextInvoiceNumber(input.shopId, prefix);
 
-  const sale = await SaleModel.create({
-    shopId: input.shopId,
-    invoiceNumber,
-    customerId,
-    status: body.complete ? "COMPLETED" : "DRAFT",
-    subtotal,
-    discount,
-    tax,
-    total,
-    amountPaid: 0,
-    amountDue: total,
-    createdBy: input.userId,
-    completedAt: body.complete ? new Date() : undefined,
-    idempotencyKey: body.idempotencyKey,
-  });
+  const { saleId, stockUpdates, paymentResult } = await withOptionalTransaction(
+    async (session) => {
+      // Soft pre-check (atomic reserve happens below)
+      if (body.complete) {
+        for (const line of lines) {
+          if (!line.trackStock) continue;
+          const available = await getAvailableStock(
+            input.shopId,
+            line.productId,
+            session,
+          );
+          if (!allowNegative && available < line.quantity) {
+            throw badRequest(
+              `Stock kam hai: ${line.productNameSnapshot} (available ${available})`,
+            );
+          }
+        }
+      }
 
-  await SaleItemModel.insertMany(
-    lines.map((l) => ({
-      saleId: sale._id,
-      productId: l.productId,
-      productNameSnapshot: l.productNameSnapshot,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      unitCostSnapshot: l.unitCostSnapshot,
-      discount: l.discount,
-      tax: l.tax,
-      lineTotal: l.lineTotal,
-    })),
+      const invoiceNumber = await nextInvoiceNumber(
+        input.shopId,
+        prefix,
+        session,
+      );
+
+      const [sale] = await SaleModel.create(
+        [
+          {
+            shopId: input.shopId,
+            invoiceNumber,
+            customerId,
+            status: body.complete ? "COMPLETED" : "DRAFT",
+            subtotal,
+            discount,
+            tax,
+            total,
+            amountPaid: 0,
+            amountDue: total,
+            createdBy: input.userId,
+            completedAt: body.complete ? new Date() : undefined,
+            idempotencyKey: body.idempotencyKey,
+          },
+        ],
+        { session: session ?? undefined },
+      );
+
+      await SaleItemModel.insertMany(
+        lines.map((l) => ({
+          saleId: sale!._id,
+          productId: l.productId,
+          productNameSnapshot: l.productNameSnapshot,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          unitCostSnapshot: l.unitCostSnapshot,
+          discount: l.discount,
+          tax: l.tax,
+          lineTotal: l.lineTotal,
+        })),
+        { session: session ?? undefined },
+      );
+
+      let updates: Array<{ productId: Types.ObjectId; currentStock: number }> =
+        [];
+      if (body.complete) {
+        updates = await writeSaleOutStock({
+          shopId: input.shopId,
+          saleId: sale!._id,
+          userId: input.userId,
+          lines,
+          allowNegative,
+          session,
+        });
+      }
+
+      let payResult: Awaited<ReturnType<typeof applyPaymentToSale>> | null =
+        null;
+
+      if (body.complete && body.payment) {
+        const method = body.payment.method;
+        if (method === "CREDIT") {
+          sale!.amountPaid = 0;
+          sale!.amountDue = total;
+          await sale!.save({ session: session ?? undefined });
+        } else {
+          const applied =
+            body.payment.amount !== undefined
+              ? body.payment.amount
+              : total;
+          payResult = await applyPaymentToSale({
+            shopId: input.shopId,
+            saleId: sale!._id,
+            userId: input.userId,
+            session,
+            raw: {
+              method,
+              amount: applied > 0 ? applied : total,
+              receivedAmount: body.payment.receivedAmount,
+              reference: body.payment.reference,
+              idempotencyKey: body.idempotencyKey
+                ? `${body.idempotencyKey}:pay`
+                : undefined,
+            },
+          });
+        }
+      }
+
+      return {
+        saleId: sale!._id,
+        stockUpdates: updates,
+        paymentResult: payResult,
+      };
+    },
   );
 
-  if (body.complete) {
-    await writeSaleOutStock({
-      shopId: input.shopId,
-      saleId: sale._id,
-      userId: input.userId,
-      lines,
-    });
+  if (stockUpdates.length) {
+    emitStockUpdated(input.shopId, stockUpdates);
   }
 
-  let paymentResult: Awaited<ReturnType<typeof applyPaymentToSale>> | null =
-    null;
-
-  if (body.complete && body.payment) {
-    const method = body.payment.method;
-    if (method === "CREDIT") {
-      // Revenue stays on sale; due remains unpaid — no cash payment row.
-      sale.amountPaid = 0;
-      sale.amountDue = total;
-      await sale.save();
-    } else {
-      const applied =
-        body.payment.amount !== undefined
-          ? body.payment.amount
-          : total;
-      paymentResult = await applyPaymentToSale({
-        shopId: input.shopId,
-        saleId: sale._id,
-        userId: input.userId,
-        raw: {
-          method,
-          amount: applied > 0 ? applied : total,
-          receivedAmount: body.payment.receivedAmount,
-          reference: body.payment.reference,
-          idempotencyKey: body.idempotencyKey
-            ? `${body.idempotencyKey}:pay`
-            : undefined,
-        },
-      });
-    }
-  }
-
-  const bundle = await loadSaleBundle(sale._id, input.shopId);
+  const bundle = await loadSaleBundle(saleId, input.shopId);
   return {
     ...bundle,
     change: paymentResult?.changeGiven ?? 0,
@@ -200,20 +264,22 @@ export async function applyPaymentToSale(input: {
   saleId: Types.ObjectId;
   userId: AuthUserId;
   raw: unknown;
+  session?: ClientSession | null;
 }) {
   const body = createPaymentSchema.parse(input.raw);
+  const session = input.session ?? null;
 
   if (body.idempotencyKey) {
     const existing = await PaymentModel.findOne({
       shopId: input.shopId,
       idempotencyKey: body.idempotencyKey,
-    });
+    }).session(session);
     if (existing) {
       return {
         payment: serializePayment(existing),
         changeGiven: existing.changeGiven ?? 0,
         receivedAmount: existing.receivedAmount ?? null,
-        sale: await SaleModel.findById(input.saleId),
+        sale: await SaleModel.findById(input.saleId).session(session),
       };
     }
   }
@@ -221,7 +287,7 @@ export async function applyPaymentToSale(input: {
   const sale = await SaleModel.findOne({
     _id: input.saleId,
     shopId: input.shopId,
-  });
+  }).session(session);
   if (!sale) throw notFound("Sale not found");
   if (sale.status !== "COMPLETED") {
     throw badRequest("Only completed sales accept payments");
@@ -251,27 +317,32 @@ export async function applyPaymentToSale(input: {
     changeGiven = roundMoney(tendered - applied);
   }
 
-  const payment = await PaymentModel.create({
-    shopId: input.shopId,
-    saleId: sale._id,
-    customerId: sale.customerId,
-    method: body.method,
-    amount: applied,
-    status: "CONFIRMED",
-    reference: body.reference,
-    receivedAmount,
-    changeGiven,
-    receivedAt: new Date(),
-    createdBy: input.userId,
-    idempotencyKey: body.idempotencyKey,
-  });
+  const [payment] = await PaymentModel.create(
+    [
+      {
+        shopId: input.shopId,
+        saleId: sale._id,
+        customerId: sale.customerId,
+        method: body.method,
+        amount: applied,
+        status: "CONFIRMED",
+        reference: body.reference,
+        receivedAmount,
+        changeGiven,
+        receivedAt: new Date(),
+        createdBy: input.userId,
+        idempotencyKey: body.idempotencyKey,
+      },
+    ],
+    { session: session ?? undefined },
+  );
 
   sale.amountPaid = roundMoney(sale.amountPaid + applied);
   sale.amountDue = roundMoney(Math.max(0, sale.total - sale.amountPaid));
-  await sale.save();
+  await sale.save({ session: session ?? undefined });
 
   return {
-    payment: serializePayment(payment),
+    payment: serializePayment(payment!),
     changeGiven,
     receivedAmount: receivedAmount ?? null,
     sale,
@@ -303,26 +374,50 @@ async function writeSaleOutStock(input: {
   shopId: Types.ObjectId;
   saleId: Types.ObjectId;
   userId: AuthUserId;
+  allowNegative: boolean;
+  session?: ClientSession | null;
   lines: Array<{
     productId: Types.ObjectId;
     quantity: number;
     trackStock: boolean;
     unitCostSnapshot?: number;
+    productNameSnapshot?: string;
   }>;
-}) {
-  const docs = input.lines
-    .filter((l) => l.trackStock)
-    .map((l) => ({
+}): Promise<Array<{ productId: Types.ObjectId; currentStock: number }>> {
+  const updates: Array<{ productId: Types.ObjectId; currentStock: number }> =
+    [];
+  const docs = [];
+
+  for (const l of input.lines) {
+    if (!l.trackStock) continue;
+    const delta = -Math.abs(l.quantity);
+    const currentStock = await applyStockDelta({
+      shopId: input.shopId,
+      productId: l.productId,
+      delta,
+      allowNegative: input.allowNegative,
+      session: input.session,
+      productName: l.productNameSnapshot,
+    });
+    updates.push({ productId: l.productId, currentStock });
+    docs.push({
       shopId: input.shopId,
       productId: l.productId,
       type: "SALE_OUT" as const,
-      quantityDelta: -Math.abs(l.quantity),
+      quantityDelta: delta,
       sourceType: "SALE",
       sourceId: input.saleId,
       unitCost: l.unitCostSnapshot,
       createdBy: input.userId,
-    }));
-  if (docs.length) await InventoryTransactionModel.insertMany(docs);
+    });
+  }
+
+  if (docs.length) {
+    await InventoryTransactionModel.insertMany(docs, {
+      session: input.session ?? undefined,
+    });
+  }
+  return updates;
 }
 
 async function ensureCustomerInShop(

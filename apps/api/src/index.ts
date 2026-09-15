@@ -1,8 +1,10 @@
 import "dotenv/config";
+import http from "node:http";
 import { createApp } from "./app.js";
 import { connectMongo } from "./lib/db.js";
 import { loadEnv } from "./lib/env.js";
 import { logger, setLogLevel } from "./lib/logger.js";
+import { initRealtime } from "./modules/realtime/socket.js";
 
 async function main() {
   const env = loadEnv();
@@ -17,7 +19,10 @@ async function main() {
   }
 
   const app = createApp(env);
-  app.listen(env.PORT, () => {
+  const server = http.createServer(app);
+  initRealtime(server, env);
+
+  server.listen(env.PORT, () => {
     logger.info(`API listening on http://localhost:${env.PORT}`);
   });
 }

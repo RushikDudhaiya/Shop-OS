@@ -8,7 +8,8 @@ import { ProductModel } from "../products/product.model.js";
 import { ShopModel } from "../shops/shop.model.js";
 import { writeAudit } from "../audit/audit.model.js";
 import { InventoryTransactionModel } from "./inventory-transaction.model.js";
-import { getAvailableStock, getAvailableStockMap } from "./stock.js";
+import { applyStockDelta, getAvailableStock, getAvailableStockMap } from "./stock.js";
+import { emitStockUpdated } from "../realtime/socket.js";
 
 const OUT_TYPES = new Set([
   "SALE_OUT",
@@ -190,12 +191,20 @@ inventoryRouter.post(
       }
 
       const current = await getAvailableStock(shopId, product._id);
-      const next = current + delta;
-      if (!allowNegative && next < 0) {
+      const nextPreview = current + delta;
+      if (!allowNegative && nextPreview < 0) {
         throw badRequest(
           `Stock negative nahi ho sakta (available ${current}, delta ${delta})`,
         );
       }
+
+      const availableStock = await applyStockDelta({
+        shopId,
+        productId: product._id,
+        delta,
+        allowNegative,
+        productName: product.name,
+      });
 
       const tx = await InventoryTransactionModel.create({
         shopId,
@@ -217,6 +226,10 @@ inventoryRouter.post(
         metadata: { type: body.type, delta, note: body.note },
       });
 
+      emitStockUpdated(shopId, [
+        { productId: product._id, currentStock: availableStock },
+      ]);
+
       res.status(201).json({
         transaction: {
           _id: String(tx._id),
@@ -226,7 +239,7 @@ inventoryRouter.post(
           note: tx.note ?? null,
           createdAt: tx.createdAt?.toISOString?.(),
         },
-        availableStock: next,
+        availableStock,
         productName: product.name,
       });
     } catch (err) {

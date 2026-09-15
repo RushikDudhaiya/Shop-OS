@@ -38,6 +38,7 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import { api, ApiRequestError } from "@/lib/api";
 import { cn, formatINR } from "@/lib/cn";
+import { onStockUpdated } from "@/lib/shopRealtime";
 import { BulkAddPanel } from "./BulkAddPanel";
 import { AddProductDialog } from "./AddProductDialog";
 import { categoryArtFor } from "./categoryArt";
@@ -390,6 +391,22 @@ export function ProductsPage() {
     }, 250);
     return () => window.clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    return onStockUpdated((payload) => {
+      if (payload.shopId !== shopId) return;
+      const map = new Map(
+        payload.updates.map((u) => [u.productId, u.currentStock]),
+      );
+      setItems((prev) =>
+        prev.map((p) =>
+          map.has(p._id)
+            ? { ...p, availableStock: map.get(p._id) ?? p.availableStock }
+            : p,
+        ),
+      );
+    });
+  }, [shopId]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
